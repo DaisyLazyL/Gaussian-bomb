@@ -1,0 +1,13 @@
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+.pinchgs*.log
+.pinchgs*.pid
+.pinchgs*.job
+
+validation/
+assets/
+scripts/
+recordings/
+*.webm

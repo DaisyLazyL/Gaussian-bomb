@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PinchGS</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="rail" aria-label="PinchGS controls">
+        <div class="brand">
+          <span class="brand-mark">PG</span>
+          <div>
+            <h1>PinchGS</h1>
+            <p>Gesture editing for 3D Gaussian scenes</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Import 3DGS</span>
+            <span class="status-dot" id="fileStatusDot"></span>
+          </div>
+          <label class="drop-zone" id="dropZone">
+            <input id="fileInput" type="file" accept=".ply,.splat,.ksplat" />
+            <span class="upload-icon">+</span>
+            <strong>Choose or drop a scene</strong>
+            <small>PLY and SPLAT preview now. KSPLAT hook is reserved.</small>
+          </label>
+          <div class="file-meta" id="fileMeta">Demo Gaussian cloud is loaded.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Edit Tool</span>
+          </div>
+          <div class="tool-grid" role="group" aria-label="Edit tool">
+            <button class="tool-button is-active" data-tool="move" title="Move selected Gaussians">
+              <span>↔</span>
+              Move
+            </button>
+            <button class="tool-button" data-tool="deform" title="Inflate or pinch local scale">
+              <span>◎</span>
+              Deform
+            </button>
+            <button class="tool-button" data-tool="erase" title="Lower opacity">
+              <span>⌫</span>
+              Erase
+            </button>
+            <button class="tool-button" data-tool="paint" title="Change color">
+              <span>●</span>
+              Paint
+            </button>
+          </div>
+          <label class="range-row">
+            <span>Brush radius</span>
+            <input id="brushRadius" type="range" min="0.05" max="1.2" value="0.34" step="0.01" />
+          </label>
+          <label class="range-row">
+            <span>Strength</span>
+            <input id="editStrength" type="range" min="0.05" max="1" value="0.42" step="0.01" />
+          </label>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Gesture Input</span>
+            <span class="pill" id="gesturePill">Simulator</span>
+          </div>
+          <div class="camera-box">
+            <video id="cameraPreview" playsinline muted></video>
+            <canvas id="handOverlay"></canvas>
+            <div class="camera-empty" id="cameraEmpty">Camera off</div>
+          </div>
+          <div class="gesture-actions">
+            <button id="cameraToggle" class="secondary-button">Start camera</button>
+            <button id="cameraStop" class="secondary-button" disabled>Stop camera</button>
+            <button id="resetScene" class="secondary-button">Reset scene</button>
+          </div>
+          <div class="hint-line">Pinch thumb and index finger to edit. Shift-drag is the fallback simulator.</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Record Demo</span>
+            <span class="pill" id="recordPill">Ready</span>
+          </div>
+          <div class="record-actions">
+            <button id="recordToggle" class="primary-button">Start recording</button>
+            <button id="recordDownload" class="secondary-button" disabled>Download</button>
+            <button id="recordShare" class="secondary-button" disabled>Share</button>
+          </div>
+          <video id="recordPreview" class="record-preview" controls playsinline></video>
+          <div class="file-meta" id="recordMeta">Records the 3D canvas as a shareable WebM video.</div>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="topbar">
+          <div class="metrics">
+            <div>
+              <span id="pointCount">0</span>
+              <small>Gaussians</small>
+            </div>
+            <div>
+              <span id="selectedCount">0</span>
+              <small>Selected</small>
+            </div>
+            <div>
+              <span id="fpsCounter">--</span>
+              <small>FPS</small>
+            </div>
+          </div>
+          <div class="interaction-state" id="interactionState">Import a scene or start gesture input</div>
+        </div>
+        <canvas id="sceneCanvas"></canvas>
+        <div class="reticle" id="reticle"></div>
+        <div class="gesture-feedback" id="gestureFeedback">
+          <span id="gestureFeedbackTitle">Waiting for hand</span>
+          <small id="gestureFeedbackDetail">Start camera, then show one hand.</small>
+        </div>
+        <div class="gesture-hud" id="gestureHud">
+          <div>
+            <span id="handStatus">Hand not tracked</span>
+            <strong id="pinchStatus">Open hand</strong>
+          </div>
+          <div class="pinch-meter" aria-hidden="true">
+            <span id="pinchMeter"></span>
+          </div>
+        </div>
+        <div class="legend">
+          <span><i class="swatch move"></i>Pinch move</span>
+          <span><i class="swatch rotate"></i>Open palm rotate</span>
+          <span><i class="swatch zoom"></i>Two-hand zoom</span>
+          <span><i class="swatch deform"></i>Local deform</span>
+          <span><i class="swatch erase"></i>Opacity erase</span>
+        </div>
+
+        <div class="onboarding is-visible" id="onboarding">
+          <div class="onboarding-card">
+            <div class="panel-title">
+              <span>How to use PinchGS</span>
+              <button class="icon-button" id="onboardingClose" aria-label="Close onboarding">×</button>
+            </div>
+            <ol class="onboarding-steps">
+              <li><strong>Start camera</strong><span>Allow browser camera permission.</span></li>
+              <li><strong>Show one hand</strong><span>Wait for the HUD to say Hand visible.</span></li>
+              <li><strong>Pinch</strong><span>Touch thumb and index finger to lock a Gaussian cluster.</span></li>
+              <li><strong>Open palm</strong><span>Move one open hand to rotate the scene.</span></li>
+              <li><strong>Two hands</strong><span>Move hands apart or together to zoom.</span></li>
+            </ol>
+            <div class="onboarding-actions">
+              <button id="onboardingStart" class="primary-button">Start camera</button>
+              <button id="onboardingSkip" class="secondary-button">Skip</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="Gaussian inspector">
+        <section class="panel">
+          <div class="panel-title">
+            <span>Gaussian Params</span>
+          </div>
+          <div class="param-list">
+            <div><span>center mu</span><strong id="paramCenter">0.00, 0.00, 0.00</strong></div>
+            <div><span>scale sigma</span><strong id="paramScale">1.00</strong></div>
+            <div><span>opacity alpha</span><strong id="paramOpacity">1.00</strong></div>
+            <div><span>color / SH</span><strong id="paramColor">demo</strong></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Demo Flow</span>
+          </div>
+          <ol class="timeline">
+            <li class="is-current">Import 3DGS scene</li>
+            <li>Pinch to select a local Gaussian cluster</li>
+            <li>Open palm rotates; two hands zoom</li>
+            <li>Move, deform, erase, or recolor params</li>
+            <li>Show before / after edit state</li>
+          </ol>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <span>Prototype Status</span>
+          </div>
+          <div class="check-list">
+            <span>PLY Gaussian center preview</span>
+            <span>SPLAT binary preview</span>
+            <span>Local parameter editing</span>
+            <span>Camera gesture hook</span>
+            <span>Shift-drag fallback for live demos</span>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
