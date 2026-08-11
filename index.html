@@ -16,8 +16,12 @@
             <p>Gesture editing for 3D Gaussian scenes</p>
           </div>
         </div>
+        <div class="mode-actions">
+          <button id="studioModeButton" class="secondary-button is-active">Studio</button>
+          <button id="gameModeButton" class="primary-button">Game mode</button>
+        </div>
 
-        <section class="panel">
+        <section class="panel" id="importPanel">
           <div class="panel-title">
             <span>Import 3DGS</span>
             <span class="status-dot" id="fileStatusDot"></span>
@@ -29,6 +33,11 @@
             <small>PLY and SPLAT preview now. KSPLAT hook is reserved.</small>
           </label>
           <div class="file-meta" id="fileMeta">Demo Gaussian cloud is loaded.</div>
+          <div class="game-room-box game-only">
+            <strong id="roomStatus">Create a game room, then upload the shared scene.</strong>
+            <button id="copyRoomLink" class="secondary-button btn-full" disabled>Copy invite link</button>
+            <small id="roomLinkText">Invited players open the link and enter Game mode directly.</small>
+          </div>
         </section>
 
         <section class="panel">
@@ -78,7 +87,48 @@
             <button id="cameraStop" class="secondary-button" disabled>Stop camera</button>
             <button id="resetScene" class="secondary-button">Reset scene</button>
           </div>
+          <div class="mask-row">
+            <label for="maskSelect">Camera mask</label>
+            <select id="maskSelect">
+              <option value="none">None</option>
+              <option value="webHero">Web Hero</option>
+              <option value="tinyOfficer">Tiny Officer</option>
+              <option value="pixelFace">Pixel Face</option>
+              <option value="starPilot">Star Pilot</option>
+            </select>
+          </div>
           <div class="hint-line">Pinch thumb and index finger to edit. Shift-drag is the fallback simulator.</div>
+        </section>
+
+        <section class="panel game-only" id="gamePanel">
+          <div class="panel-title">
+            <span>Game Challenge</span>
+            <span class="pill" id="competitionPill">3 tries</span>
+          </div>
+          <div class="hint-line" id="gameHint">Invite friends to pinch this same scene. Each player gets 3 tries, 15 seconds per try. Best score ranks.</div>
+          <label class="field-row">
+            <span>Nickname</span>
+            <input id="playerName" type="text" maxlength="18" placeholder="Your name" />
+          </label>
+          <div class="competition-scoreboard">
+            <div>
+              <span id="competitionTimer">15.0</span>
+              <small>seconds</small>
+            </div>
+            <div>
+              <span id="competitionScore">0</span>
+              <small>creativity</small>
+            </div>
+          </div>
+          <div class="try-row">
+            <span id="triesLeft">3 tries left</span>
+            <span id="bestScore">Best 0</span>
+          </div>
+          <button id="competitionStart" class="primary-button btn-full">Start 15s try</button>
+          <div class="competition-breakdown" id="competitionBreakdown">
+            Coverage 0 · Variety 0 · Rhythm 0
+          </div>
+          <ol class="leaderboard" id="leaderboard"></ol>
         </section>
 
         <section class="panel">
@@ -113,13 +163,22 @@
             </div>
           </div>
           <div class="interaction-state" id="interactionState">Import a scene or start gesture input</div>
+          <div class="stage-game-controls game-only" id="stageGameControls">
+            <div class="stage-timer">
+              <span id="stageTimer">15.0</span>
+              <small>sec</small>
+            </div>
+            <button id="stageCompetitionStart" class="primary-button">Start try</button>
+          </div>
         </div>
         <canvas id="sceneCanvas"></canvas>
         <div class="reticle" id="reticle"></div>
+        <div class="score-fx" id="scoreFx"></div>
         <div class="gesture-feedback" id="gestureFeedback">
           <span id="gestureFeedbackTitle">Waiting for hand</span>
           <small id="gestureFeedbackDetail">Start camera, then show one hand.</small>
         </div>
+        <div class="game-countdown" id="gameCountdown">3</div>
         <div class="gesture-hud" id="gestureHud">
           <div>
             <span id="handStatus">Hand not tracked</span>
@@ -131,6 +190,7 @@
         </div>
         <div class="legend">
           <span><i class="swatch move"></i>Pinch move</span>
+          <span><i class="swatch hammer"></i>Fist hammer</span>
           <span><i class="swatch rotate"></i>Open palm rotate</span>
           <span><i class="swatch zoom"></i>Two-hand zoom</span>
           <span><i class="swatch deform"></i>Local deform</span>
@@ -147,6 +207,7 @@
               <li><strong>Start camera</strong><span>Allow browser camera permission.</span></li>
               <li><strong>Show one hand</strong><span>Wait for the HUD to say Hand visible.</span></li>
               <li><strong>Pinch</strong><span>Touch thumb and index finger to lock a Gaussian cluster.</span></li>
+              <li><strong>Fist hammer</strong><span>Make a fist and punch downward to smash Gaussians.</span></li>
               <li><strong>Open palm</strong><span>Move one open hand to rotate the scene.</span></li>
               <li><strong>Two hands</strong><span>Move hands apart or together to zoom.</span></li>
             </ol>
@@ -156,6 +217,51 @@
             </div>
           </div>
         </div>
+
+        <div class="game-rules-modal" id="gameRulesModal">
+          <div class="game-rules-card">
+            <div class="panel-title">
+              <span>Game mode rules</span>
+              <button class="icon-button" id="gameRulesClose" aria-label="Close game rules">×</button>
+            </div>
+            <div class="game-rules-hero">
+              <strong>Invite friends to tear apart one shared Gaussian scene.</strong>
+              <span>Everyone plays on their own computer. Best score wins.</span>
+            </div>
+            <label class="field-row">
+              <span>Your nickname</span>
+              <input id="modalPlayerName" type="text" maxlength="18" placeholder="Enter nickname first" />
+            </label>
+            <ol class="onboarding-steps">
+              <li><strong>Host uploads a scene</strong><span>The shared room keeps one 3DGS scene for all invited players.</span></li>
+              <li><strong>Share the invite link</strong><span>Friends open the link and enter Game mode directly.</span></li>
+              <li><strong>3 tries per player</strong><span>Each try lasts 15 seconds. Only the highest score is ranked.</span></li>
+              <li><strong>Creativity score</strong><span>Coverage, rhythm, variety, and spatial play all matter.</span></li>
+            </ol>
+            <button id="gameRulesGotIt" class="primary-button btn-full">Got it and import scene</button>
+          </div>
+        </div>
+
+        <div class="game-rules-modal" id="tryResultModal">
+          <div class="game-rules-card">
+            <div class="panel-title">
+              <span>Try result</span>
+              <button class="icon-button" id="tryResultClose" aria-label="Close try result">×</button>
+            </div>
+            <div class="result-score">
+              <span id="resultScore">0</span>
+              <small id="resultDelta">First try complete</small>
+            </div>
+            <div class="try-row">
+              <span id="resultTries">2 tries left</span>
+              <span id="resultBest">Best 0</span>
+            </div>
+            <ol class="leaderboard result-leaderboard" id="resultLeaderboard"></ol>
+            <button id="resultNextTry" class="primary-button btn-full">Next try</button>
+          </div>
+        </div>
+
+        <div class="toast" id="toast"></div>
       </section>
 
       <aside class="inspector" aria-label="Gaussian inspector">
@@ -193,6 +299,7 @@
             <span>SPLAT binary preview</span>
             <span>Local parameter editing</span>
             <span>Camera gesture hook</span>
+            <span>Fist hammer gesture</span>
             <span>Shift-drag fallback for live demos</span>
           </div>
         </section>
