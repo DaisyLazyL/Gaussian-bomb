@@ -2,10 +2,12 @@ const canvas = document.querySelector("#sceneCanvas");
 const gl = canvas.getContext("webgl", { antialias: true, alpha: false });
 
 const ui = {
+  languageSelect: document.querySelector("#languageSelect"),
   studioModeButton: document.querySelector("#studioModeButton"),
   gameModeButton: document.querySelector("#gameModeButton"),
   fileInput: document.querySelector("#fileInput"),
   dropZone: document.querySelector("#dropZone"),
+  sceneThumb: document.querySelector("#sceneThumb"),
   fileMeta: document.querySelector("#fileMeta"),
   fileStatusDot: document.querySelector("#fileStatusDot"),
   pointCount: document.querySelector("#pointCount"),
@@ -68,15 +70,12 @@ const ui = {
   leaderboard: document.querySelector("#leaderboard"),
   roomStatus: document.querySelector("#roomStatus"),
   copyRoomLink: document.querySelector("#copyRoomLink"),
-  roomLinkText: document.querySelector("#roomLinkText"),
-  paramCenter: document.querySelector("#paramCenter"),
-  paramScale: document.querySelector("#paramScale"),
-  paramOpacity: document.querySelector("#paramOpacity"),
-  paramColor: document.querySelector("#paramColor")
+  roomLinkText: document.querySelector("#roomLinkText")
 };
 
 const MAX_POINTS = 260000;
 const state = {
+  lang: localStorage.getItem("pinchgs-lang") || "en",
   mode: "studio",
   roomId: "",
   roomSceneLoaded: false,
@@ -130,6 +129,8 @@ const state = {
   recording: {
     active: false,
     recorder: null,
+    canvas: document.createElement("canvas"),
+    ctx: null,
     chunks: [],
     blob: null,
     url: "",
@@ -140,8 +141,566 @@ const state = {
   activeWorld: [0, 0, 0],
   activeNdc: [0, 0],
   fpsFrames: 0,
-  fpsTime: performance.now()
+  fpsTime: performance.now(),
+  thumbnailReady: false
 };
+
+const translations = {
+  en: {
+    brandSubtitle: "Gesture editing for 3D Gaussian scenes",
+    language: "Language",
+    studio: "Studio",
+    gameMode: "Game mode",
+    importTitle: "Import 3DGS",
+    chooseScene: "Choose or drop a scene",
+    importHint: "PLY and SPLAT preview now. KSPLAT hook is reserved.",
+    demoLoaded: "Demo Gaussian cloud is loaded.",
+    roomEmpty: "Create a game room, then upload the shared scene.",
+    copyInvite: "Copy invite link",
+    roomLinkHint: "Invited players open the link and enter Game mode directly.",
+    editTool: "Edit Tool",
+    move: "Move",
+    deform: "Deform",
+    erase: "Erase",
+    paint: "Paint",
+    brushRadius: "Brush radius",
+    strength: "Strength",
+    gestureInput: "Gesture Input",
+    simulator: "Simulator",
+    cameraOff: "Camera off",
+    startCamera: "Start camera",
+    camera: "Camera",
+    cameraOn: "Camera on",
+    stopCamera: "Stop camera",
+    resetScene: "Reset scene",
+    cameraMask: "Camera mask",
+    gestureHint: "Pinch thumb and index finger to edit. Shift-drag is the fallback simulator.",
+    gameChallenge: "Game Challenge",
+    tries: "3 tries",
+    gameHint: "Invite friends to pinch this same scene. Each player gets 3 tries, 15 seconds per try. Best score ranks.",
+    gameReady: "Game mode. Upload the shared scene, invite friends, then start your tries.",
+    nickname: "Nickname",
+    yourName: "Your name",
+    seconds: "seconds",
+    creativity: "creativity",
+    start15: "Start 15s try",
+    recordDemo: "Record Demo",
+    download: "Download",
+    share: "Share",
+    recordMetaReady: "Records the 3D canvas with your camera performance as a shareable WebM video.",
+    gaussians: "Gaussians",
+    selected: "Selected",
+    importOrGesture: "Import a scene or start gesture input",
+    studioReady: "Studio mode. Import a scene or start gesture input.",
+    toolPrefix: "Tool",
+    sceneReset: "Scene reset to imported state.",
+    roomReady: roomId => `Room ${roomId}: shared scene is ready.`,
+    roomNeedsScene: roomId => `Room ${roomId}: upload the scene everyone will pinch.`,
+    lanHint: "Same-machine link ready. For other computers, replace localhost with this computer's LAN IP.",
+    inviteCopiedShort: "Invite link copied.",
+    inviteCopied: "Invite link copied. Paste it to the friends you want to challenge.",
+    enterNameCopy: "Enter your nickname first, then copy the invite.",
+    copyFailed: "Copy failed. The invite link is shown in the room panel.",
+    uploadShared: "Uploading shared scene to the game room...",
+    reading: filename => `Reading ${filename}...`,
+    importFailed: message => `Import failed: ${message}`,
+    imported: "Import complete. Hold Shift and drag to simulate pinch editing.",
+    uploadFirst: "Upload scene first",
+    uploadFirstDetail: "Game mode starts after the shared 3DGS scene is uploaded.",
+    enterNameStart: "Enter your nickname before starting the challenge.",
+    noTries: "No tries left",
+    noTriesDetail: "Your best score is already on the leaderboard.",
+    getReady: "Get ready",
+    getReadyButton: "Get ready...",
+    getReadyDetail: "Challenge starts after 3, 2, 1.",
+    live: "Live",
+    running: "Challenge running...",
+    go: "Go!",
+    goDetail: "You have 15 seconds. Be weird, fast, and expressive.",
+    coverage: "Coverage",
+    variety: "Variety",
+    rhythm: "Rhythm",
+    startNextTry: "Start next try",
+    newBest: "New best score",
+    newBestDetail: score => `${score.toLocaleString()} creativity points. Ranking updated.`,
+    tryEnded: "Try ended",
+    tryEndedDetail: (score, best) => `${score.toLocaleString()} did not beat your best ${best.toLocaleString()}.`,
+    newBestDelta: delta => `New best +${delta.toLocaleString()}`,
+    belowBest: delta => `Below best by ${Math.abs(delta).toLocaleString()}`,
+    allTriesUsed: "All tries used",
+    anonymous: "Anonymous",
+    scoreSubmitted: "Score submitted",
+    scoreSubmittedDetail: (name, score) => `${name}: ${score.toLocaleString()} creativity points.`,
+    scoreSavedLocal: "Score saved locally",
+    scoreSavedLocalDetail: "Leaderboard server is not reachable right now.",
+    noRanking: "No ranking yet",
+    noScores: "No scores yet",
+    starting: "Starting...",
+    loadingTracking: "Loading gesture + face tracking...",
+    cameraLoadingState: "Camera enabled. Loading MediaPipe gesture and face tracking...",
+    cameraOnTitle: "Camera is on",
+    loadingModels: "Loading gesture and face tracking models...",
+    pinchReady: "Pinch ready",
+    pinchInstruction: "Pinch thumb and index finger to edit the selected Gaussian cluster.",
+    showOneHand: "Show one hand",
+    pinchStartDetail: "Pinch thumb and index finger to start editing.",
+    cameraFailed: "Camera or hand tracking failed. Simulator mode is still available.",
+    cameraUnavailable: "Camera unavailable",
+    shiftDragSim: "Use Shift-drag to simulate pinch editing.",
+    cameraStopped: "Camera stopped. Shift-drag still works as simulator mode.",
+    cameraOffTitle: "Camera off",
+    realGestures: "Start camera to use real hand gestures.",
+    recordUnsupported: "This browser cannot record the canvas. Try Chrome or Edge.",
+    recordingNow: "Recording the 3D canvas and camera performance now...",
+    videoReady: duration => `${duration.toFixed(1)}s WebM video ready. Download or share it.`,
+    shareUnavailable: "Direct share is unavailable here. Use Download and send the video file.",
+    shared: "Shared. The video is still available below.",
+    shareCancelled: "Share was cancelled. You can still download the video.",
+    record: "Record",
+    recordCanvas: "Record the 3D canvas",
+    recording: "Recording",
+    recorded: "Recorded",
+    stop: "Stop",
+    again: "Again",
+    ready: "Ready",
+    done: "Done",
+    none: "None",
+    sec: "sec",
+    startTry: "Start try",
+    waitingForHand: "Waiting for hand",
+    startThenShow: "Start camera, then show one hand.",
+    handNotTracked: "Hand not tracked",
+    openHand: "Open hand",
+    trackingError: "Tracking error",
+    checkConsole: "Check console",
+    trackingPaused: "Tracking paused",
+    handTrackingFailed: "Hand tracking failed on this frame.",
+    modelRunningNoHand: "Model is running, but no hand landmarks are returned yet.",
+    placeHand: "Place one hand inside the camera preview.",
+    lookingForHand: "Looking for hand",
+    showHandCamera: "Show one hand to the camera.",
+    handVisible: "Hand visible",
+    completeLandmarks: "Waiting for complete hand landmarks.",
+    pinching: "Pinching",
+    pinchReleased: "Pinch released.",
+    pinchMeter: value => `Hand visible. Pinch meter ${value}%.`,
+    handVisibleDetail: "Pinch to edit, make a fist to hammer, or use two hands to zoom.",
+    pinchLocked: "Pinch locked",
+    pinchLockedDetail: "Move your hand to edit the selected Gaussians.",
+    rotateMode: "Rotate mode",
+    rotateModeDetail: "Move your open palm to rotate the scene.",
+    rotating: "Rotating",
+    rotatingState: "Open palm rotate: move your hand to orbit the scene.",
+    rotatingDetail: "Pinch to edit, or use two hands to zoom.",
+    zoomMode: "Zoom mode",
+    zoomModeDetail: "Move both hands apart or together.",
+    zooming: "Zooming",
+    zoomingState: "Two-hand zoom: move hands apart to zoom in, together to zoom out.",
+    zoomingDetail: "Move hands apart to zoom in; together to zoom out.",
+    fistReady: "Fist ready",
+    fistReadyTitle: "Fist hammer ready",
+    fistReadyDetail: "Punch downward to smash the Gaussian cluster.",
+    fistDetected: "Fist detected. Move downward quickly to hammer.",
+    hammer: "Hammer",
+    hammerSmash: "Hammer smash",
+    hammerState: selected => `Hammer smash: ${selected.toLocaleString()} Gaussians crushed`,
+    hammerDetail: selected => `${selected.toLocaleString()} Gaussians crushed.`,
+    legendMove: "Pinch move",
+    legendHammer: "Fist hammer",
+    legendRotate: "Open palm rotate",
+    legendZoom: "Two-hand zoom",
+    legendDeform: "Local deform",
+    legendErase: "Opacity erase",
+    onboardingTitle: "How to use PinchGS",
+    stepCameraTitle: "Start camera",
+    stepCameraBody: "Allow browser camera permission.",
+    stepHandTitle: "Show one hand",
+    stepHandBody: "Wait for the HUD to say Hand visible.",
+    stepPinchTitle: "Pinch",
+    stepPinchBody: "Touch thumb and index finger to lock a Gaussian cluster.",
+    stepHammerTitle: "Fist hammer",
+    stepHammerBody: "Make a fist and punch downward to smash Gaussians.",
+    stepPalmTitle: "Open palm",
+    stepPalmBody: "Move one open hand to rotate the scene.",
+    stepTwoHandsTitle: "Two hands",
+    stepTwoHandsBody: "Move hands apart or together to zoom.",
+    skip: "Skip",
+    rulesTitle: "Game mode rules",
+    rulesHeroTitle: "Invite friends to tear apart one shared Gaussian scene.",
+    rulesHeroBody: "Everyone plays on their own computer. Best score wins.",
+    yourNickname: "Your nickname",
+    enterNickname: "Enter nickname first",
+    hostUploadTitle: "Host uploads a scene",
+    hostUploadBody: "The shared room keeps one 3DGS scene for all invited players.",
+    shareInviteTitle: "Share the invite link",
+    shareInviteBody: "Friends open the link and enter Game mode directly.",
+    triesRuleTitle: "3 tries per player",
+    triesRuleBody: "Each try lasts 15 seconds. Only the highest score is ranked.",
+    creativityRuleTitle: "Creativity score",
+    creativityRuleBody: "Coverage, rhythm, variety, and spatial play all matter.",
+    gotItImport: "Got it and import scene",
+    gotIt: "Got it",
+    tryResult: "Try result",
+    firstTryComplete: "First try complete",
+    nextTry: "Next try",
+    gaussianParams: "Gaussian Params",
+    demoFlow: "Demo Flow",
+    prototypeStatus: "Prototype Status",
+    flow1: "Import 3DGS scene",
+    flow2: "Pinch to select a local Gaussian cluster",
+    flow3: "Open palm rotates; two hands zoom",
+    flow4: "Move, deform, erase, or recolor params",
+    flow5: "Show before / after edit state",
+    status1: "PLY Gaussian center preview",
+    status2: "SPLAT binary preview",
+    status3: "Local parameter editing",
+    status4: "Camera gesture hook",
+    status5: "Fist hammer gesture",
+    status6: "Shift-drag fallback for live demos"
+  },
+  zh: {
+    brandSubtitle: "用手势编辑 3D Gaussian 场景",
+    language: "语言",
+    studio: "普通模式",
+    gameMode: "游戏模式",
+    importTitle: "导入 3DGS",
+    chooseScene: "选择或拖入场景",
+    importHint: "当前支持 PLY 和 SPLAT 预览，KSPLAT 入口已预留。",
+    demoLoaded: "已加载 Demo 高斯点云。",
+    roomEmpty: "创建游戏房间后，先上传大家一起挑战的场景。",
+    copyInvite: "复制邀请链接",
+    roomLinkHint: "朋友打开链接后会直接进入游戏模式。",
+    editTool: "编辑工具",
+    move: "移动",
+    deform: "变形",
+    erase: "擦除",
+    paint: "上色",
+    brushRadius: "笔刷半径",
+    strength: "强度",
+    gestureInput: "手势输入",
+    simulator: "模拟器",
+    cameraOff: "摄像头关闭",
+    startCamera: "打开摄像头",
+    camera: "摄像头",
+    cameraOn: "摄像头已打开",
+    stopCamera: "关闭摄像头",
+    resetScene: "重置场景",
+    cameraMask: "摄像头面具",
+    gestureHint: "捏合拇指和食指开始编辑。Shift 拖拽可作为演示备用操作。",
+    gameChallenge: "游戏挑战",
+    tries: "3 次机会",
+    gameHint: "邀请朋友一起捏同一个场景。每人 3 次机会，每次 15 秒，取最高分排名。",
+    gameReady: "游戏模式。上传共享场景、邀请朋友，然后开始挑战。",
+    nickname: "昵称",
+    yourName: "输入昵称",
+    seconds: "秒",
+    creativity: "创意分",
+    start15: "开始 15 秒挑战",
+    recordDemo: "录制演示",
+    download: "下载",
+    share: "分享",
+    recordMetaReady: "录制 3D 画布和摄像头里的动作表现，生成可分享的 WebM 视频。",
+    gaussians: "高斯点",
+    selected: "已选中",
+    importOrGesture: "导入场景或打开手势输入",
+    studioReady: "普通模式。导入场景或打开手势输入。",
+    toolPrefix: "工具",
+    sceneReset: "场景已重置到导入时的状态。",
+    roomReady: roomId => `房间 ${roomId}：共享场景已准备好。`,
+    roomNeedsScene: roomId => `房间 ${roomId}：上传大家一起挑战的场景。`,
+    lanHint: "本机链接已准备好。其他电脑访问时，需要把 localhost 换成这台电脑的局域网 IP。",
+    inviteCopiedShort: "邀请链接已复制。",
+    inviteCopied: "邀请链接已复制，快去粘贴给要挑战的朋友。",
+    enterNameCopy: "先输入你的昵称，再复制邀请链接。",
+    copyFailed: "复制失败，邀请链接已显示在房间面板里。",
+    uploadShared: "正在把共享场景上传到游戏房间...",
+    reading: filename => `正在读取 ${filename}...`,
+    importFailed: message => `导入失败：${message}`,
+    imported: "导入完成。可以用 Shift 拖拽模拟捏合编辑。",
+    uploadFirst: "请先上传场景",
+    uploadFirstDetail: "游戏模式需要先上传共享 3DGS 场景。",
+    enterNameStart: "开始挑战前请先输入昵称。",
+    noTries: "没有机会了",
+    noTriesDetail: "你的最高分已经在排行榜里了。",
+    getReady: "准备",
+    getReadyButton: "准备中...",
+    getReadyDetail: "挑战会在 3、2、1 后开始。",
+    live: "挑战中",
+    running: "挑战进行中...",
+    go: "开始！",
+    goDetail: "你有 15 秒，尽量大胆、快速、有表现力地捏。",
+    coverage: "覆盖",
+    variety: "多样性",
+    rhythm: "节奏",
+    startNextTry: "开始下一次",
+    newBest: "刷新最高分",
+    newBestDetail: score => `${score.toLocaleString()} 创意分，排名已更新。`,
+    tryEnded: "本次结束",
+    tryEndedDetail: (score, best) => `${score.toLocaleString()} 没有超过你的最高分 ${best.toLocaleString()}。`,
+    newBestDelta: delta => `刷新最高分 +${delta.toLocaleString()}`,
+    belowBest: delta => `低于最高分 ${Math.abs(delta).toLocaleString()}`,
+    allTriesUsed: "3 次机会已用完",
+    anonymous: "匿名玩家",
+    scoreSubmitted: "分数已提交",
+    scoreSubmittedDetail: (name, score) => `${name}：${score.toLocaleString()} 创意分。`,
+    scoreSavedLocal: "分数已本地保存",
+    scoreSavedLocalDetail: "当前连接不到排行榜服务。",
+    noRanking: "暂无排名",
+    noScores: "暂无分数",
+    starting: "正在启动...",
+    loadingTracking: "正在加载手势 + 人脸识别...",
+    cameraLoadingState: "摄像头已打开，正在加载 MediaPipe 手势和人脸识别...",
+    cameraOnTitle: "摄像头已打开",
+    loadingModels: "正在加载手势和人脸识别模型...",
+    pinchReady: "捏合就绪",
+    pinchInstruction: "捏合拇指和食指来编辑选中的高斯点簇。",
+    showOneHand: "伸出一只手",
+    pinchStartDetail: "捏合拇指和食指开始编辑。",
+    cameraFailed: "摄像头或手势识别失败，仍可使用模拟器模式。",
+    cameraUnavailable: "摄像头不可用",
+    shiftDragSim: "使用 Shift 拖拽来模拟捏合编辑。",
+    cameraStopped: "摄像头已关闭。Shift 拖拽仍可作为模拟器模式使用。",
+    cameraOffTitle: "摄像头已关闭",
+    realGestures: "打开摄像头即可使用真实手势。",
+    recordUnsupported: "当前浏览器不能录制画布，建议使用 Chrome 或 Edge。",
+    recordingNow: "正在录制 3D 画布和摄像头表现...",
+    videoReady: duration => `${duration.toFixed(1)} 秒 WebM 视频已生成，可下载或分享。`,
+    shareUnavailable: "这里无法直接分享，请下载视频文件后发送给朋友。",
+    shared: "已分享。视频仍保留在下方。",
+    shareCancelled: "分享已取消。你仍然可以下载视频。",
+    record: "录制",
+    recordCanvas: "录制 3D 画布",
+    recording: "录制中",
+    recorded: "已录制",
+    stop: "停止",
+    again: "再录",
+    ready: "就绪",
+    done: "完成",
+    none: "无",
+    sec: "秒",
+    startTry: "开始挑战",
+    waitingForHand: "等待识别手",
+    startThenShow: "先打开摄像头，然后把一只手放进画面。",
+    handNotTracked: "未识别到手",
+    openHand: "张开手",
+    trackingError: "识别出错",
+    checkConsole: "查看控制台",
+    trackingPaused: "识别暂停",
+    handTrackingFailed: "这一帧手势识别失败。",
+    modelRunningNoHand: "模型正在运行，但暂时没有返回手部关键点。",
+    placeHand: "把一只手放进摄像头画面里。",
+    lookingForHand: "正在找手",
+    showHandCamera: "把一只手放到摄像头前。",
+    handVisible: "已识别到手",
+    completeLandmarks: "等待完整的手部关键点。",
+    pinching: "捏合中",
+    pinchReleased: "捏合已松开。",
+    pinchMeter: value => `已识别到手。捏合强度 ${value}%。`,
+    handVisibleDetail: "捏合编辑，握拳下锤，或用双手缩放。",
+    pinchLocked: "捏合锁定",
+    pinchLockedDetail: "移动手来编辑选中的高斯点。",
+    rotateMode: "旋转模式",
+    rotateModeDetail: "移动张开的手掌来旋转场景。",
+    rotating: "旋转中",
+    rotatingState: "张掌旋转：移动手来环绕查看场景。",
+    rotatingDetail: "可以捏合编辑，也可以用双手缩放。",
+    zoomMode: "缩放模式",
+    zoomModeDetail: "双手分开或靠近。",
+    zooming: "缩放中",
+    zoomingState: "双手缩放：分开双手放大，靠近双手缩小。",
+    zoomingDetail: "双手分开放大，靠近缩小。",
+    fistReady: "拳头就绪",
+    fistReadyTitle: "拳头锤就绪",
+    fistReadyDetail: "向下锤来砸碎高斯点簇。",
+    fistDetected: "识别到拳头。快速向下移动来锤击。",
+    hammer: "锤击",
+    hammerSmash: "锤击成功",
+    hammerState: selected => `锤击：${selected.toLocaleString()} 个高斯点被压碎`,
+    hammerDetail: selected => `${selected.toLocaleString()} 个高斯点被压碎。`,
+    legendMove: "捏合移动",
+    legendHammer: "拳头锤",
+    legendRotate: "张掌旋转",
+    legendZoom: "双手缩放",
+    legendDeform: "局部变形",
+    legendErase: "透明擦除",
+    onboardingTitle: "如何使用 PinchGS",
+    stepCameraTitle: "打开摄像头",
+    stepCameraBody: "允许浏览器使用摄像头。",
+    stepHandTitle: "伸出一只手",
+    stepHandBody: "等 HUD 显示已识别到手。",
+    stepPinchTitle: "捏合",
+    stepPinchBody: "拇指和食指捏在一起，锁定一簇高斯点。",
+    stepHammerTitle: "拳头锤",
+    stepHammerBody: "握拳后向下锤，砸碎高斯点。",
+    stepPalmTitle: "张开手掌",
+    stepPalmBody: "移动一只张开的手来旋转场景。",
+    stepTwoHandsTitle: "双手",
+    stepTwoHandsBody: "双手分开或靠近来缩放场景。",
+    skip: "跳过",
+    rulesTitle: "游戏模式规则",
+    rulesHeroTitle: "邀请朋友一起撕碎同一个 Gaussian 场景。",
+    rulesHeroBody: "每个人用自己的电脑挑战，最后按最高分排名。",
+    yourNickname: "你的昵称",
+    enterNickname: "先输入昵称",
+    hostUploadTitle: "房主上传场景",
+    hostUploadBody: "房间会保存一个共享 3DGS 场景，所有玩家挑战同一个场景。",
+    shareInviteTitle: "分享邀请链接",
+    shareInviteBody: "朋友打开链接后会直接进入游戏模式。",
+    triesRuleTitle: "每人 3 次机会",
+    triesRuleBody: "每次挑战 15 秒，只取最高分进入排名。",
+    creativityRuleTitle: "创意评分",
+    creativityRuleBody: "覆盖范围、节奏、动作多样性和空间表现都会影响分数。",
+    gotItImport: "知道了，去导入场景",
+    gotIt: "知道了",
+    tryResult: "本次结果",
+    firstTryComplete: "第一次挑战完成",
+    nextTry: "下一次挑战",
+    gaussianParams: "高斯参数",
+    demoFlow: "演示流程",
+    prototypeStatus: "原型状态",
+    flow1: "导入 3DGS 场景",
+    flow2: "捏合选择局部高斯点簇",
+    flow3: "张掌旋转，双手缩放",
+    flow4: "移动、变形、擦除或重新上色",
+    flow5: "展示编辑前后状态",
+    status1: "PLY 高斯中心预览",
+    status2: "SPLAT 二进制预览",
+    status3: "局部参数编辑",
+    status4: "摄像头手势接入",
+    status5: "拳头锤手势",
+    status6: "Shift 拖拽演示备用"
+  }
+};
+
+function t(key, ...args) {
+  const value = translations[state.lang][key] || translations.en[key] || key;
+  return typeof value === "function" ? value(...args) : value;
+}
+
+function setText(selector, key) {
+  const element = document.querySelector(selector);
+  if (element) element.textContent = t(key);
+}
+
+function setPlaceholder(selector, key) {
+  const element = document.querySelector(selector);
+  if (element) element.placeholder = t(key);
+}
+
+function setOptionText(value, label) {
+  const option = ui.maskSelect.querySelector(`option[value="${value}"]`);
+  if (option) option.textContent = label;
+}
+
+function triesText(count) {
+  if (state.lang === "zh") return `${count} 次机会`;
+  return `${count} ${count === 1 ? "try" : "tries"}`;
+}
+
+function triesLeftText(count) {
+  if (state.lang === "zh") return `还剩 ${count} 次机会`;
+  return `${count} ${count === 1 ? "try" : "tries"} left`;
+}
+
+function bestText(score) {
+  return state.lang === "zh" ? `最高分 ${score.toLocaleString()}` : `Best ${score.toLocaleString()}`;
+}
+
+function breakdownText(coverage, variety, rhythm) {
+  return `${t("coverage")} ${Math.round(coverage)} · ${t("variety")} ${Math.round(variety)} · ${t("rhythm")} ${Math.round(rhythm)}`;
+}
+
+function applyLanguage() {
+  document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
+  setText(".brand p", "brandSubtitle");
+  setText(".language-switch span", "language");
+  ui.studioModeButton.textContent = t("studio");
+  ui.gameModeButton.textContent = t("gameMode");
+  ui.dropZone.title = t("chooseScene");
+  if (!state.original || ui.fileMeta.textContent.includes("Demo") || ui.fileMeta.textContent.includes("Demo")) {
+    ui.fileMeta.textContent = t("demoLoaded");
+  }
+  ui.copyRoomLink.textContent = t("copyInvite");
+  setText("#roomLinkText", "roomLinkHint");
+  setText(".rail section:nth-of-type(2) .panel-title span", "editTool");
+  const toolLabels = { move: "move", deform: "deform", erase: "erase", paint: "paint" };
+  document.querySelectorAll(".tool-button").forEach(button => {
+    const icon = button.querySelector("span")?.outerHTML || "";
+    button.innerHTML = `${icon}${t(toolLabels[button.dataset.tool])}`;
+  });
+  setText(".range-row:nth-of-type(1) span", "brushRadius");
+  setText(".range-row:nth-of-type(2) span", "strength");
+  setText(".rail section:nth-of-type(3) .panel-title span:first-child", "gestureInput");
+  ui.gesturePill.textContent = state.gesture.cameraOn ? t("camera") : t("simulator");
+  ui.cameraEmpty.textContent = t("cameraOff");
+  ui.cameraToggle.textContent = state.gesture.cameraOn ? t("cameraOn") : t("startCamera");
+  ui.cameraStop.textContent = t("stopCamera");
+  ui.resetScene.textContent = t("resetScene");
+  setText(".mask-row label", "cameraMask");
+  setOptionText("none", t("none"));
+  setText(".rail section:nth-of-type(3) .hint-line", "gestureHint");
+  setText("#gamePanel .panel-title span:first-child", "gameChallenge");
+  ui.competitionPill.textContent = state.competition.triesLeft > 0 ? triesText(state.competition.triesLeft) : t("done");
+  setText("#gameHint", "gameHint");
+  setText("#gamePanel .field-row span", "nickname");
+  setPlaceholder("#playerName", "yourName");
+  setText(".competition-scoreboard div:first-child small", "seconds");
+  setText(".competition-scoreboard div:last-child small", "creativity");
+  setText(".rail section:nth-of-type(5) .panel-title span", "recordDemo");
+  ui.recordDownload.textContent = t("download");
+  ui.recordShare.textContent = t("share");
+  if (!state.recording.blob && !state.recording.active) ui.recordMeta.textContent = t("recordMetaReady");
+  setText(".metrics div:nth-child(1) small", "gaussians");
+  setText(".metrics div:nth-child(2) small", "selected");
+  if (!state.gesture.cameraOn && !state.competition.active) ui.interactionState.textContent = state.mode === "game" ? t("gameReady") : t("studioReady");
+  ui.recordToggle.querySelector("span:last-child").textContent = state.recording.active ? t("stop") : state.recording.blob ? t("again") : t("record");
+  ui.recordToggle.title = t("recordCanvas");
+  ui.recordPill.textContent = state.recording.active ? t("recording") : state.recording.blob ? t("recorded") : t("ready");
+  setText(".stage-timer small", "sec");
+  setText("#gestureFeedbackTitle", "waitingForHand");
+  setText("#gestureFeedbackDetail", "startThenShow");
+  ui.handStatus.textContent = t("handNotTracked");
+  ui.pinchStatus.textContent = t("openHand");
+  const legendKeys = ["legendMove", "legendHammer", "legendRotate", "legendZoom", "legendDeform", "legendErase"];
+  document.querySelectorAll(".legend span").forEach((item, index) => {
+    const swatch = item.querySelector("i")?.outerHTML || "";
+    item.innerHTML = `${swatch}${t(legendKeys[index])}`;
+  });
+  setText("#onboarding .panel-title span", "onboardingTitle");
+  const steps = [
+    ["stepCameraTitle", "stepCameraBody"],
+    ["stepHandTitle", "stepHandBody"],
+    ["stepPinchTitle", "stepPinchBody"],
+    ["stepHammerTitle", "stepHammerBody"],
+    ["stepPalmTitle", "stepPalmBody"],
+    ["stepTwoHandsTitle", "stepTwoHandsBody"]
+  ];
+  document.querySelectorAll("#onboarding .onboarding-steps li").forEach((item, index) => {
+    item.querySelector("strong").textContent = t(steps[index][0]);
+    item.querySelector("span").textContent = t(steps[index][1]);
+  });
+  ui.onboardingStart.textContent = t("startCamera");
+  ui.onboardingSkip.textContent = t("skip");
+  setText("#gameRulesModal .panel-title span", "rulesTitle");
+  setText(".game-rules-hero strong", "rulesHeroTitle");
+  setText(".game-rules-hero span", "rulesHeroBody");
+  setText("#gameRulesModal .field-row span", "yourNickname");
+  setPlaceholder("#modalPlayerName", "enterNickname");
+  const ruleSteps = [
+    ["hostUploadTitle", "hostUploadBody"],
+    ["shareInviteTitle", "shareInviteBody"],
+    ["triesRuleTitle", "triesRuleBody"],
+    ["creativityRuleTitle", "creativityRuleBody"]
+  ];
+  document.querySelectorAll("#gameRulesModal .onboarding-steps li").forEach((item, index) => {
+    item.querySelector("strong").textContent = t(ruleSteps[index][0]);
+    item.querySelector("span").textContent = t(ruleSteps[index][1]);
+  });
+  ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("gotIt") : t("gotItImport");
+  setText("#tryResultModal .panel-title span", "tryResult");
+  if (!state.competition.score) ui.resultDelta.textContent = t("firstTryComplete");
+  setText("#resultNextTry", "nextTry");
+}
 
 if (!gl) {
   ui.interactionState.textContent = "WebGL is unavailable in this browser.";
@@ -208,10 +767,23 @@ const uniforms = {
 
 initDemoScene();
 bindUi();
+applyLanguage();
 initializeModeFromUrl();
 requestAnimationFrame(render);
 
 function bindUi() {
+  ui.languageSelect.value = state.lang;
+  ui.languageSelect.addEventListener("change", () => {
+    state.lang = ui.languageSelect.value;
+    localStorage.setItem("pinchgs-lang", state.lang);
+    applyLanguage();
+    if (state.mode === "game") {
+      updateRoomUi();
+      updateTryUi();
+    } else {
+      ui.interactionState.textContent = t("studioReady");
+    }
+  });
   ui.studioModeButton.addEventListener("click", enterStudioMode);
   ui.gameModeButton.addEventListener("click", () => enterGameMode());
   ui.copyRoomLink.addEventListener("click", copyInviteLink);
@@ -245,7 +817,7 @@ function bindUi() {
       document.querySelectorAll(".tool-button").forEach(item => item.classList.remove("is-active"));
       button.classList.add("is-active");
       state.tool = button.dataset.tool;
-      ui.interactionState.textContent = `Tool: ${button.textContent.trim()}`;
+      ui.interactionState.textContent = `${t("toolPrefix")}: ${button.textContent.trim()}`;
     });
   });
 
@@ -262,7 +834,7 @@ function bindUi() {
     state.points = clonePoints(state.original);
     state.selected.clear();
     updateStats();
-    ui.interactionState.textContent = "Scene reset to imported state.";
+    ui.interactionState.textContent = t("sceneReset");
   });
 
   ui.cameraToggle.addEventListener("click", startCameraMode);
@@ -354,7 +926,7 @@ function enterStudioMode() {
   document.body.classList.remove("game-mode");
   ui.studioModeButton.classList.add("is-active");
   ui.gameModeButton.classList.remove("is-active");
-  ui.interactionState.textContent = "Studio mode. Import a scene or start gesture input.";
+  ui.interactionState.textContent = t("studioReady");
 }
 
 async function enterGameMode(roomId = "") {
@@ -374,7 +946,7 @@ async function enterGameMode(roomId = "") {
   updateTryUi();
   await loadRoomScene();
   await loadLeaderboard();
-  ui.interactionState.textContent = "Game mode. Upload the shared scene, invite friends, then start your tries.";
+  ui.interactionState.textContent = t("gameReady");
   showGameRules();
 }
 
@@ -391,21 +963,21 @@ async function createRoom() {
 function updateRoomUi() {
   if (!state.roomId) return;
   ui.roomStatus.textContent = state.roomSceneLoaded
-    ? `Room ${state.roomId}: shared scene is ready.`
-    : `Room ${state.roomId}: upload the scene everyone will pinch.`;
+    ? t("roomReady", state.roomId)
+    : t("roomNeedsScene", state.roomId);
   ui.copyRoomLink.disabled = false;
-  ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? "Got it" : "Got it and import scene";
+  ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("gotIt") : t("gotItImport");
   ui.roomLinkText.textContent = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-    ? "Same-machine link ready. For other computers, replace localhost with this computer's LAN IP."
+    ? t("lanHint")
     : inviteUrl();
   const canStart = state.roomSceneLoaded && state.competition.triesLeft > 0 && !state.competition.active && !state.competition.preparing;
-  setCompetitionButtons(!canStart, canStart ? "Start try" : "Upload scene first");
+  setCompetitionButtons(!canStart, canStart ? t("startTry") : t("uploadFirst"));
 }
 
 async function copyInviteLink() {
   const name = normalizedPlayerName();
   if (!name) {
-    showToast("Enter your nickname first, then copy the invite.");
+    showToast(t("enterNameCopy"));
     ui.playerName.focus();
     return;
   }
@@ -413,11 +985,11 @@ async function copyInviteLink() {
   const message = `${name} 邀请你一起来挑战 PinchGS：${url}`;
   try {
     await navigator.clipboard.writeText(message);
-    ui.roomLinkText.textContent = "Invite link copied.";
-    showToast("Invite link copied. Paste it to the friends you want to challenge.");
+    ui.roomLinkText.textContent = t("inviteCopiedShort");
+    showToast(t("inviteCopied"));
   } catch (error) {
     ui.roomLinkText.textContent = url;
-    showToast("Copy failed. The invite link is shown in the room panel.");
+    showToast(t("copyFailed"));
   }
 }
 
@@ -429,7 +1001,7 @@ function inviteUrl() {
 }
 
 async function uploadRoomScene(filename, buffer) {
-  ui.roomStatus.textContent = "Uploading shared scene to the game room...";
+  ui.roomStatus.textContent = t("uploadShared");
   await fetch(`/api/rooms/${state.roomId}/scene`, {
     method: "POST",
     headers: { "X-Scene-Name": encodeURIComponent(filename) },
@@ -463,7 +1035,7 @@ async function loadRoomScene() {
 }
 
 async function loadFile(file) {
-  ui.interactionState.textContent = `Reading ${file.name}...`;
+  ui.interactionState.textContent = t("reading", file.name);
   const buffer = await file.arrayBuffer();
 
   try {
@@ -473,7 +1045,7 @@ async function loadFile(file) {
     }
   } catch (error) {
     ui.interactionState.textContent = error.message;
-    ui.fileMeta.textContent = `Import failed: ${error.message}`;
+    ui.fileMeta.textContent = t("importFailed", error.message);
   }
 }
 
@@ -492,10 +1064,12 @@ function loadSceneBuffer(buffer, filename, size = buffer.byteLength) {
   state.points = normalizePoints(parsed);
   state.original = clonePoints(state.points);
   state.selected.clear();
+  state.thumbnailReady = false;
   updateStats();
   ui.fileStatusDot.classList.add("is-ready");
   ui.fileMeta.textContent = `${filename} | ${state.points.count.toLocaleString()} gaussians | ${(size / 1024 / 1024).toFixed(2)} MB`;
-  ui.interactionState.textContent = "Import complete. Hold Shift and drag to simulate pinch editing.";
+  ui.interactionState.textContent = t("imported");
+  window.setTimeout(updateSceneThumbnail, 80);
 }
 
 function initDemoScene() {
@@ -749,7 +1323,80 @@ function render(now) {
     state.fpsTime = now;
   }
 
+  if (state.recording.active) {
+    composeRecordingFrame();
+  }
+
+  if (!state.thumbnailReady) {
+    updateSceneThumbnail();
+  }
+
   requestAnimationFrame(render);
+}
+
+function composeRecordingFrame() {
+  const recCanvas = state.recording.canvas;
+  if (!state.recording.ctx) state.recording.ctx = recCanvas.getContext("2d");
+  const ctx = state.recording.ctx;
+  if (!ctx) return;
+
+  if (recCanvas.width !== canvas.width || recCanvas.height !== canvas.height) {
+    recCanvas.width = canvas.width;
+    recCanvas.height = canvas.height;
+  }
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, recCanvas.width, recCanvas.height);
+  ctx.drawImage(canvas, 0, 0, recCanvas.width, recCanvas.height);
+  drawRecordingCameraInset(ctx, recCanvas.width, recCanvas.height);
+}
+
+function drawRecordingCameraInset(ctx, width, height) {
+  if (!state.gesture.cameraOn || !ui.cameraPreview.srcObject || ui.cameraPreview.readyState < 2) return;
+
+  const insetWidth = Math.round(Math.min(width * 0.26, 340 * (window.devicePixelRatio || 1)));
+  const insetHeight = Math.round(insetWidth * 0.75);
+  const margin = Math.round(Math.max(18, width * 0.018));
+  const x = width - insetWidth - margin;
+  const y = height - insetHeight - margin;
+  const radius = Math.round(Math.max(10, insetWidth * 0.035));
+
+  ctx.save();
+  roundedRectPath(ctx, x, y, insetWidth, insetHeight, radius);
+  ctx.fillStyle = "rgba(8, 10, 13, 0.82)";
+  ctx.fill();
+  ctx.clip();
+  ctx.translate(x + insetWidth, y);
+  ctx.scale(-1, 1);
+  ctx.drawImage(ui.cameraPreview, 0, 0, insetWidth, insetHeight);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.drawImage(ui.handOverlay, 0, 0, insetWidth, insetHeight);
+  ctx.restore();
+
+  ctx.save();
+  roundedRectPath(ctx, x, y, insetWidth, insetHeight, radius);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.32)";
+  ctx.lineWidth = Math.max(2, width * 0.0018);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function roundedRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width * 0.5, height * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 function bindAttributes() {
@@ -829,12 +1476,6 @@ function applyGestureEdit(dx, dy, freshSelection) {
   }
 
   ui.selectedCount.textContent = selected.toLocaleString();
-  if (selected > 0) {
-    ui.paramCenter.textContent = `${(sumX / selected).toFixed(2)}, ${(sumY / selected).toFixed(2)}, ${(sumZ / selected).toFixed(2)}`;
-    ui.paramScale.textContent = (sumScale / selected).toFixed(3);
-    ui.paramOpacity.textContent = (sumOpacity / selected).toFixed(3);
-    ui.paramColor.textContent = state.tool;
-  }
   ui.interactionState.textContent = selected > 0
     ? `Pinch ${state.tool}: ${selected.toLocaleString()} Gaussians affected`
     : "No Gaussians selected. Increase radius or move closer to the object.";
@@ -899,17 +1540,17 @@ async function startCompetition() {
   if (state.competition.active || state.competition.preparing) return;
   if (state.mode !== "game") return;
   if (!state.roomSceneLoaded) {
-    setGestureFeedback("Upload scene first", "Game mode starts after the shared 3DGS scene is uploaded.", "");
+    setGestureFeedback(t("uploadFirst"), t("uploadFirstDetail"), "");
     return;
   }
   const name = normalizedPlayerName();
   if (!name) {
-    showToast("Enter your nickname before starting the challenge.");
+    showToast(t("enterNameStart"));
     ui.playerName.focus();
     return;
   }
   if (state.competition.triesLeft <= 0) {
-    setGestureFeedback("No tries left", "Your best score is already on the leaderboard.", "");
+    setGestureFeedback(t("noTries"), t("noTriesDetail"), "");
     return;
   }
   hideGameRules();
@@ -932,20 +1573,20 @@ async function startCompetition() {
   state.competition.lastEditAt = 0;
   state.competition.submitted = false;
 
-  ui.competitionPill.textContent = "Ready";
-  setCompetitionButtons(true, "Get ready...");
+  ui.competitionPill.textContent = t("ready");
+  setCompetitionButtons(true, t("getReadyButton"));
   ui.competitionScore.textContent = "0";
   ui.competitionTimer.textContent = "15.0";
   ui.stageTimer.textContent = "15.0";
-  ui.competitionBreakdown.textContent = "Coverage 0 · Variety 0 · Rhythm 0";
-  setGestureFeedback("Get ready", "Challenge starts after 3, 2, 1.", "pinch");
+  ui.competitionBreakdown.textContent = breakdownText(0, 0, 0);
+  setGestureFeedback(t("getReady"), t("getReadyDetail"), "pinch");
   await runPreStartCountdown();
   state.competition.preparing = false;
   state.competition.active = true;
   state.competition.startedAt = performance.now();
-  ui.competitionPill.textContent = "Live";
-  setCompetitionButtons(true, "Challenge running...");
-  setGestureFeedback("Go!", "You have 15 seconds. Be weird, fast, and expressive.", "pinch");
+  ui.competitionPill.textContent = t("live");
+  setCompetitionButtons(true, t("running"));
+  setGestureFeedback(t("go"), t("goDetail"), "pinch");
   tickCompetition();
 }
 
@@ -1023,7 +1664,7 @@ function updateCompetitionFromEdit({ selected, center, dx, dy, freshSelection, a
   c.score = Math.round(coverage + variety + rhythm + spatialPlay);
 
   ui.competitionScore.textContent = c.score.toLocaleString();
-  ui.competitionBreakdown.textContent = `Coverage ${Math.round(coverage)} · Variety ${Math.round(variety)} · Rhythm ${Math.round(rhythm)}`;
+  ui.competitionBreakdown.textContent = breakdownText(coverage, variety, rhythm);
 }
 
 async function finishCompetition() {
@@ -1033,8 +1674,8 @@ async function finishCompetition() {
   c.triesLeft = Math.max(0, c.triesLeft - 1);
   ui.competitionTimer.textContent = "0.0";
   ui.gameCountdown.classList.remove("is-visible");
-  ui.competitionPill.textContent = "Done";
-  setCompetitionButtons(c.triesLeft <= 0, c.triesLeft > 0 ? "Start next try" : "No tries left");
+  ui.competitionPill.textContent = t("done");
+  setCompetitionButtons(c.triesLeft <= 0, c.triesLeft > 0 ? t("startNextTry") : t("noTries"));
 
   const previousBest = c.bestScore;
   const delta = c.score - previousBest;
@@ -1043,34 +1684,34 @@ async function finishCompetition() {
     c.bestScore = c.score;
     showScoreFx(`+${delta.toLocaleString()}`, "up");
     updateTryUi();
-    setGestureFeedback("New best score", `${c.bestScore.toLocaleString()} creativity points. Ranking updated.`, "hand");
+    setGestureFeedback(t("newBest"), t("newBestDetail", c.bestScore), "hand");
     scores = await submitScore();
   } else {
     showScoreFx(`-${Math.abs(delta).toLocaleString()}`, "down");
     updateTryUi();
-    setGestureFeedback("Try ended", `${c.score.toLocaleString()} did not beat your best ${c.bestScore.toLocaleString()}.`, "");
+    setGestureFeedback(t("tryEnded"), t("tryEndedDetail", c.score, c.bestScore), "");
     scores = await loadLeaderboard();
   }
   showTryResult(delta, scores);
 }
 
 function updateTryUi() {
-  ui.triesLeft.textContent = `${state.competition.triesLeft} ${state.competition.triesLeft === 1 ? "try" : "tries"} left`;
-  ui.bestScore.textContent = `Best ${state.competition.bestScore.toLocaleString()}`;
-  ui.competitionPill.textContent = state.competition.triesLeft > 0 ? `${state.competition.triesLeft} tries` : "Done";
+  ui.triesLeft.textContent = triesLeftText(state.competition.triesLeft);
+  ui.bestScore.textContent = bestText(state.competition.bestScore);
+  ui.competitionPill.textContent = state.competition.triesLeft > 0 ? triesText(state.competition.triesLeft) : t("done");
   const canStart = state.mode === "game" && state.roomSceneLoaded && state.competition.triesLeft > 0 && !state.competition.active && !state.competition.preparing;
-  setCompetitionButtons(!canStart, canStart ? "Start try" : state.competition.triesLeft > 0 ? "Upload scene first" : "No tries left");
+  setCompetitionButtons(!canStart, canStart ? t("startTry") : state.competition.triesLeft > 0 ? t("uploadFirst") : t("noTries"));
 }
 
 function showTryResult(delta, scores) {
   ui.resultScore.textContent = state.competition.score.toLocaleString();
   ui.resultDelta.textContent = delta > 0
-    ? `New best +${delta.toLocaleString()}`
-    : `Below best by ${Math.abs(delta).toLocaleString()}`;
-  ui.resultTries.textContent = `${state.competition.triesLeft} ${state.competition.triesLeft === 1 ? "try" : "tries"} left`;
-  ui.resultBest.textContent = `Best ${state.competition.bestScore.toLocaleString()}`;
+    ? t("newBestDelta", delta)
+    : t("belowBest", delta);
+  ui.resultTries.textContent = triesLeftText(state.competition.triesLeft);
+  ui.resultBest.textContent = bestText(state.competition.bestScore);
   ui.resultNextTry.disabled = state.competition.triesLeft <= 0;
-  ui.resultNextTry.textContent = state.competition.triesLeft > 0 ? "Next try" : "All tries used";
+  ui.resultNextTry.textContent = state.competition.triesLeft > 0 ? t("nextTry") : t("allTriesUsed");
   ui.resultLeaderboard.innerHTML = leaderboardMarkup(scores);
   ui.tryResultModal.classList.add("is-visible");
 }
@@ -1087,7 +1728,7 @@ function showScoreFx(text, direction) {
 }
 
 async function submitScore() {
-  const name = ui.playerName.value.trim() || "Anonymous";
+  const name = ui.playerName.value.trim() || t("anonymous");
   try {
     const response = await fetch(`/api/scores?room=${encodeURIComponent(state.roomId || "default")}`, {
       method: "POST",
@@ -1102,10 +1743,10 @@ async function submitScore() {
     });
     const payload = await response.json();
     renderLeaderboard(payload.scores || []);
-    setGestureFeedback("Score submitted", `${name}: ${state.competition.bestScore.toLocaleString()} creativity points.`, "hand");
+    setGestureFeedback(t("scoreSubmitted"), t("scoreSubmittedDetail", name, state.competition.bestScore), "hand");
     return payload.scores || [];
   } catch (error) {
-    setGestureFeedback("Score saved locally", "Leaderboard server is not reachable right now.", "");
+    setGestureFeedback(t("scoreSavedLocal"), t("scoreSavedLocalDetail"), "");
     return [];
   }
 }
@@ -1117,7 +1758,7 @@ async function loadLeaderboard() {
     renderLeaderboard(payload.scores || []);
     return payload.scores || [];
   } catch (error) {
-    ui.leaderboard.innerHTML = `<li><span>-</span><strong>No ranking yet</strong><em>0</em></li>`;
+    ui.leaderboard.innerHTML = `<li><span>-</span><strong>${t("noRanking")}</strong><em>0</em></li>`;
     return [];
   }
 }
@@ -1128,7 +1769,7 @@ function renderLeaderboard(scores) {
 
 function leaderboardMarkup(scores) {
   if (!scores.length) {
-    return `<li><span>-</span><strong>No scores yet</strong><em>0</em></li>`;
+    return `<li><span>-</span><strong>${t("noScores")}</strong><em>0</em></li>`;
   }
   return scores.map((entry, index) => `
     <li>
@@ -1153,36 +1794,36 @@ async function startCameraMode() {
   if (state.gesture.cameraOn || state.gesture.loading) return;
 
   try {
-    ui.cameraToggle.textContent = "Starting...";
+    ui.cameraToggle.textContent = t("starting");
     ui.cameraToggle.disabled = true;
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
     ui.cameraPreview.srcObject = stream;
     await ui.cameraPreview.play();
     state.gesture.cameraOn = true;
     ui.cameraEmpty.classList.add("is-hidden");
-    ui.cameraToggle.textContent = "Loading gesture + face tracking...";
+    ui.cameraToggle.textContent = t("loadingTracking");
     ui.cameraToggle.disabled = true;
     ui.cameraStop.disabled = false;
-    ui.gesturePill.textContent = "Camera";
-    ui.interactionState.textContent = "Camera enabled. Loading MediaPipe gesture and face tracking...";
-    setGestureFeedback("Camera is on", "Loading gesture and face tracking models...", "hand");
+    ui.gesturePill.textContent = t("camera");
+    ui.interactionState.textContent = t("cameraLoadingState");
+    setGestureFeedback(t("cameraOnTitle"), t("loadingModels"), "hand");
     await setupHandLandmarker();
     if (!state.gesture.cameraOn) return;
-    ui.cameraToggle.textContent = "Camera on";
+    ui.cameraToggle.textContent = t("cameraOn");
     ui.cameraToggle.disabled = true;
-    ui.gesturePill.textContent = "Pinch ready";
-    ui.interactionState.textContent = "Pinch thumb and index finger to edit the selected Gaussian cluster.";
-    setGestureFeedback("Show one hand", "Pinch thumb and index finger to start editing.", "hand");
+    ui.gesturePill.textContent = t("pinchReady");
+    ui.interactionState.textContent = t("pinchInstruction");
+    setGestureFeedback(t("showOneHand"), t("pinchStartDetail"), "hand");
     requestAnimationFrame(trackHands);
   } catch (error) {
     state.gesture.loading = false;
     state.gesture.ready = Boolean(state.gesture.landmarker);
     stopCameraMode();
-    ui.cameraToggle.textContent = "Start camera";
+    ui.cameraToggle.textContent = t("startCamera");
     ui.cameraToggle.disabled = false;
-    ui.gesturePill.textContent = "Simulator";
-    ui.interactionState.textContent = "Camera or hand tracking failed. Simulator mode is still available.";
-    setGestureFeedback("Camera unavailable", "Use Shift-drag to simulate pinch editing.", "");
+    ui.gesturePill.textContent = t("simulator");
+    ui.interactionState.textContent = t("cameraFailed");
+    setGestureFeedback(t("cameraUnavailable"), t("shiftDragSim"), "");
   }
 }
 
@@ -1200,17 +1841,17 @@ function stopCameraMode() {
   state.face.confidence = 0;
   clearHandOverlay();
   ui.cameraEmpty.classList.remove("is-hidden");
-  ui.cameraToggle.textContent = "Start camera";
+  ui.cameraToggle.textContent = t("startCamera");
   ui.cameraToggle.disabled = false;
   ui.cameraStop.disabled = true;
-  ui.gesturePill.textContent = "Simulator";
-  ui.handStatus.textContent = "Hand not tracked";
-  ui.pinchStatus.textContent = "Open hand";
+  ui.gesturePill.textContent = t("simulator");
+  ui.handStatus.textContent = t("handNotTracked");
+  ui.pinchStatus.textContent = t("openHand");
   ui.pinchMeter.style.width = "0%";
   ui.gestureHud.classList.remove("is-active");
   ui.reticle.classList.remove("is-visible");
-  ui.interactionState.textContent = "Camera stopped. Shift-drag still works as simulator mode.";
-  setGestureFeedback("Camera off", "Start camera to use real hand gestures.", "");
+  ui.interactionState.textContent = t("cameraStopped");
+  setGestureFeedback(t("cameraOffTitle"), t("realGestures"), "");
 }
 
 function toggleRecording() {
@@ -1222,8 +1863,8 @@ function toggleRecording() {
 }
 
 function startRecording() {
-  if (!canvas.captureStream || typeof MediaRecorder === "undefined") {
-    ui.recordMeta.textContent = "This browser cannot record the canvas. Try Chrome or Edge.";
+  if (!state.recording.canvas.captureStream || typeof MediaRecorder === "undefined") {
+    ui.recordMeta.textContent = t("recordUnsupported");
     return;
   }
 
@@ -1231,7 +1872,8 @@ function startRecording() {
     URL.revokeObjectURL(state.recording.url);
   }
 
-  const stream = canvas.captureStream(30);
+  composeRecordingFrame();
+  const stream = state.recording.canvas.captureStream(30);
   const mimeType = chooseRecordingMimeType();
   const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
   state.recording.active = true;
@@ -1241,14 +1883,14 @@ function startRecording() {
   state.recording.url = "";
   state.recording.startedAt = Date.now();
 
-  ui.recordPill.textContent = "Recording";
-  ui.recordToggle.textContent = "Stop recording";
+  ui.recordPill.textContent = t("recording");
+  ui.recordToggle.querySelector("span:last-child").textContent = t("stop");
   ui.recordToggle.classList.add("is-recording");
   ui.recordDownload.disabled = true;
   ui.recordShare.disabled = true;
   ui.recordPreview.classList.remove("is-visible");
   ui.recordPreview.removeAttribute("src");
-  ui.recordMeta.textContent = "Recording the 3D canvas now...";
+  ui.recordMeta.textContent = t("recordingNow");
 
   recorder.addEventListener("dataavailable", event => {
     if (event.data && event.data.size > 0) {
@@ -1277,14 +1919,14 @@ function finalizeRecording() {
   state.recording.blob = blob;
   state.recording.url = url;
 
-  ui.recordPill.textContent = "Recorded";
-  ui.recordToggle.textContent = "Record again";
+  ui.recordPill.textContent = t("recorded");
+  ui.recordToggle.querySelector("span:last-child").textContent = t("again");
   ui.recordToggle.classList.remove("is-recording");
   ui.recordDownload.disabled = false;
   ui.recordShare.disabled = !canShareRecording(blob);
   ui.recordPreview.src = url;
   ui.recordPreview.classList.add("is-visible");
-  ui.recordMeta.textContent = `${duration.toFixed(1)}s WebM video ready. Download or share it.`;
+  ui.recordMeta.textContent = t("videoReady", duration);
 }
 
 function downloadRecording() {
@@ -1304,7 +1946,7 @@ async function shareRecording() {
   });
 
   if (!navigator.canShare || !navigator.canShare({ files: [file] }) || !navigator.share) {
-    ui.recordMeta.textContent = "Direct share is unavailable here. Use Download and send the video file.";
+    ui.recordMeta.textContent = t("shareUnavailable");
     return;
   }
 
@@ -1314,9 +1956,9 @@ async function shareRecording() {
       title: "PinchGS demo",
       text: "Gesture-edited 3D Gaussian scene demo."
     });
-    ui.recordMeta.textContent = "Shared. The video is still available below.";
+    ui.recordMeta.textContent = t("shared");
   } catch (error) {
-    ui.recordMeta.textContent = "Share was cancelled. You can still download the video.";
+    ui.recordMeta.textContent = t("shareCancelled");
   }
 }
 
@@ -1337,6 +1979,26 @@ function canShareRecording(blob) {
 
 function timestampForFile() {
   return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+
+function updateSceneThumbnail() {
+  if (!ui.sceneThumb) return;
+  const ctx = ui.sceneThumb.getContext("2d");
+  const size = 96;
+  ui.sceneThumb.width = size;
+  ui.sceneThumb.height = size;
+  ctx.clearRect(0, 0, size, size);
+  try {
+    ctx.drawImage(canvas, 0, 0, size, size);
+  } catch {
+    const gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, "#62d3ff");
+    gradient.addColorStop(1, "#77e08f");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+  }
+  ui.dropZone.classList.add("has-scene");
+  state.thumbnailReady = true;
 }
 
 async function setupHandLandmarker() {
@@ -1398,9 +2060,9 @@ function trackHands() {
       const results = state.gesture.landmarker.detectForVideo(ui.cameraPreview, timestamp);
       handleHandResults(results);
     } catch (error) {
-      ui.handStatus.textContent = "Tracking error";
-      ui.pinchStatus.textContent = "Check console";
-      setGestureFeedback("Tracking paused", error.message || "Hand tracking failed on this frame.", "");
+      ui.handStatus.textContent = t("trackingError");
+      ui.pinchStatus.textContent = t("checkConsole");
+      setGestureFeedback(t("trackingPaused"), error.message || t("handTrackingFailed"), "");
     }
   }
 
@@ -1414,15 +2076,15 @@ function handleHandResults(results) {
 
   if (!hand) {
     state.gesture.framesWithoutHand++;
-    ui.handStatus.textContent = "Hand not tracked";
-    ui.pinchStatus.textContent = "Open hand";
+    ui.handStatus.textContent = t("handNotTracked");
+    ui.pinchStatus.textContent = t("openHand");
     ui.pinchMeter.style.width = "0%";
     ui.gestureHud.classList.remove("is-active");
     const detail = state.gesture.framesWithoutHand > 30
-      ? "Model is running, but no hand landmarks are returned yet."
-      : "Place one hand inside the camera preview.";
-    setGestureFeedback("Looking for hand", detail, "");
-    endGesture("Show one hand to the camera.");
+      ? t("modelRunningNoHand")
+      : t("placeHand");
+    setGestureFeedback(t("lookingForHand"), detail, "");
+    endGesture(t("showHandCamera"));
     return;
   }
   state.gesture.framesWithoutHand = 0;
@@ -1433,7 +2095,7 @@ function handleHandResults(results) {
   const indexMcp = hand[5];
   if (!thumbTip || !indexTip || !wrist || !indexMcp) {
     resetTransformGestures();
-    setGestureFeedback("Hand visible", "Waiting for complete hand landmarks.", "hand");
+    setGestureFeedback(t("handVisible"), t("completeLandmarks"), "hand");
     return;
   }
   const pinchDistance = landmarkDistance(thumbTip, indexTip);
@@ -1444,8 +2106,8 @@ function handleHandResults(results) {
     y: (thumbTip.y + indexTip.y) * 0.5
   };
   const pinchAmount = clamp((0.82 - pinchRatio) / 0.46, 0, 1);
-  ui.handStatus.textContent = "Hand visible";
-  ui.pinchStatus.textContent = state.gesture.active ? "Pinching" : "Open hand";
+  ui.handStatus.textContent = t("handVisible");
+  ui.pinchStatus.textContent = state.gesture.active ? t("pinching") : t("openHand");
   ui.pinchMeter.style.width = `${Math.round(pinchAmount * 100)}%`;
   ui.gestureHud.classList.toggle("is-active", state.gesture.active);
 
@@ -1466,13 +2128,13 @@ function handleHandResults(results) {
   } else if (state.gesture.active && pinchRatio < 0.78) {
     updateCameraPinch(midpoint);
   } else if (state.gesture.active) {
-    endGesture("Pinch released.");
+    endGesture(t("pinchReleased"));
   } else if (pinchRatio > 0.95) {
     handleOpenPalmRotate(hand);
   } else {
     resetTransformGestures();
-    ui.interactionState.textContent = `Hand visible. Pinch meter ${Math.round(pinchAmount * 100)}%.`;
-    setGestureFeedback("Hand visible", "Pinch to edit, make a fist to hammer, or use two hands to zoom.", "hand");
+    ui.interactionState.textContent = t("pinchMeter", Math.round(pinchAmount * 100));
+    setGestureFeedback(t("handVisible"), t("handVisibleDetail"), "hand");
   }
 }
 
@@ -1509,9 +2171,9 @@ function beginCameraPinch(midpoint) {
   state.gesture.lastCanvasY = point.y;
   setGestureWorldPoint(point.x, point.y);
   applyGestureEdit(0, 0, true);
-  ui.pinchStatus.textContent = "Pinching";
+  ui.pinchStatus.textContent = t("pinching");
   ui.gestureHud.classList.add("is-active");
-  setGestureFeedback("Pinch locked", "Move your hand to edit the selected Gaussians.", "pinch");
+  setGestureFeedback(t("pinchLocked"), t("pinchLockedDetail"), "pinch");
 }
 
 function updateCameraPinch(midpoint) {
@@ -1531,7 +2193,7 @@ function handleOpenPalmRotate(hand) {
     state.gesture.rotateActive = true;
     state.gesture.lastPalmX = palm.x;
     state.gesture.lastPalmY = palm.y;
-    setGestureFeedback("Rotate mode", "Move your open palm to rotate the scene.", "hand");
+    setGestureFeedback(t("rotateMode"), t("rotateModeDetail"), "hand");
     return;
   }
 
@@ -1541,9 +2203,9 @@ function handleOpenPalmRotate(hand) {
   state.gesture.lastPalmY = palm.y;
   state.camera.yaw += dx * 3.4;
   state.camera.pitch = clamp(state.camera.pitch + dy * 2.2, -1.15, 1.15);
-  ui.pinchStatus.textContent = "Rotating";
-  ui.interactionState.textContent = "Open palm rotate: move your hand to orbit the scene.";
-  setGestureFeedback("Rotating scene", "Pinch to edit, or use two hands to zoom.", "hand");
+  ui.pinchStatus.textContent = t("rotating");
+  ui.interactionState.textContent = t("rotatingState");
+  setGestureFeedback(t("rotating"), t("rotatingDetail"), "hand");
 }
 
 function handleTwoHandZoom(hands) {
@@ -1555,16 +2217,16 @@ function handleTwoHandZoom(hands) {
   if (!state.gesture.zoomActive) {
     state.gesture.zoomActive = true;
     state.gesture.lastHandDistance = distance;
-    setGestureFeedback("Zoom mode", "Move both hands apart or together.", "hand");
+    setGestureFeedback(t("zoomMode"), t("zoomModeDetail"), "hand");
     return;
   }
 
   const delta = distance - state.gesture.lastHandDistance;
   state.gesture.lastHandDistance = distance;
   state.camera.distance = clamp(state.camera.distance * (1 - delta * 1.8), 0.8, 20);
-  ui.pinchStatus.textContent = "Zooming";
-  ui.interactionState.textContent = "Two-hand zoom: move hands apart to zoom in, together to zoom out.";
-  setGestureFeedback("Zooming scene", "Move hands apart to zoom in; together to zoom out.", "hand");
+  ui.pinchStatus.textContent = t("zooming");
+  ui.interactionState.textContent = t("zoomingState");
+  setGestureFeedback(t("zooming"), t("zoomingDetail"), "hand");
 }
 
 function handleFistHammer(hand) {
@@ -1577,8 +2239,8 @@ function handleFistHammer(hand) {
     state.gesture.fistActive = true;
     state.gesture.lastFistX = palm.x;
     state.gesture.lastFistY = palm.y;
-    ui.pinchStatus.textContent = "Fist ready";
-    setGestureFeedback("Fist hammer ready", "Punch downward to smash the Gaussian cluster.", "hand");
+    ui.pinchStatus.textContent = t("fistReady");
+    setGestureFeedback(t("fistReadyTitle"), t("fistReadyDetail"), "hand");
     return;
   }
 
@@ -1593,7 +2255,7 @@ function handleFistHammer(hand) {
     setGestureWorldPoint(point.x, point.y);
     applyHammerSmash(dx, dy);
   } else {
-    ui.interactionState.textContent = "Fist detected. Move downward quickly to hammer.";
+    ui.interactionState.textContent = t("fistDetected");
   }
 }
 
@@ -1619,9 +2281,9 @@ function applyHammerSmash(dx, dy) {
   }
 
   ui.selectedCount.textContent = selected.toLocaleString();
-  ui.pinchStatus.textContent = "Hammer";
-  ui.interactionState.textContent = `Hammer smash: ${selected.toLocaleString()} Gaussians crushed`;
-  setGestureFeedback("Hammer smash", `${selected.toLocaleString()} Gaussians crushed.`, "pinch");
+  ui.pinchStatus.textContent = t("hammer");
+  ui.interactionState.textContent = t("hammerState", selected);
+  setGestureFeedback(t("hammerSmash"), t("hammerDetail", selected), "pinch");
   showScoreFx("SMASH", "up");
   updateCompetitionFromEdit({ selected, center, dx: dx * 400, dy: dy * 520, freshSelection: true, action: "hammer" });
 }
@@ -1773,7 +2435,13 @@ function drawCameraMask(ctx, rect) {
   ctx.save();
   ctx.lineWidth = Math.max(2, size * 0.06);
 
-  if (state.mask === "pixelFace") {
+  if (state.mask === "thanos") {
+    drawThanosMask(ctx, cx, cy, size);
+  } else if (state.mask === "ironMan") {
+    drawIronManMask(ctx, cx, cy, size);
+  } else if (state.mask === "joker") {
+    drawJokerMask(ctx, cx, cy, size);
+  } else if (state.mask === "pixelFace") {
     drawPixelFaceMask(ctx, cx, cy, size);
   } else if (state.mask === "webHero") {
     drawWebHeroMask(ctx, cx, cy, size);
@@ -1811,6 +2479,78 @@ function updateFaceFromResults(results) {
   state.face.y = mix(state.face.y, targetY, 0.35);
   state.face.size = mix(state.face.size, clamp(span * 0.88, 0.18, 0.46), 0.3);
   state.face.confidence = mix(state.face.confidence, 1, 0.35);
+}
+
+function drawThanosMask(ctx, cx, cy, size) {
+  ctx.fillStyle = "rgba(111, 81, 158, 0.94)";
+  ctx.strokeStyle = "rgba(229, 185, 78, 0.98)";
+  roundedMask(ctx, cx, cy + size * 0.03, size * 0.92, size * 1.1);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(229, 185, 78, 0.95)";
+  ctx.fillRect(cx - size * 0.38, cy - size * 0.54, size * 0.76, size * 0.12);
+  ctx.fillRect(cx - size * 0.08, cy - size * 0.64, size * 0.16, size * 0.24);
+  ctx.strokeStyle = "rgba(54, 38, 84, 0.78)";
+  ctx.lineWidth = size * 0.035;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx + i * size * 0.09, cy - size * 0.28);
+    ctx.lineTo(cx + i * size * 0.045, cy + size * 0.34);
+    ctx.stroke();
+  }
+  drawEye(ctx, cx - size * 0.18, cy - size * 0.07, size * 0.07, "#ffe9a6");
+  drawEye(ctx, cx + size * 0.18, cy - size * 0.07, size * 0.07, "#ffe9a6");
+}
+
+function drawIronManMask(ctx, cx, cy, size) {
+  ctx.fillStyle = "rgba(169, 36, 39, 0.96)";
+  ctx.strokeStyle = "rgba(255, 204, 91, 0.95)";
+  roundedMask(ctx, cx, cy, size * 0.92, size * 1.04);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(255, 204, 91, 0.96)";
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.32, cy - size * 0.42);
+  ctx.lineTo(cx + size * 0.32, cy - size * 0.42);
+  ctx.lineTo(cx + size * 0.24, cy + size * 0.24);
+  ctx.lineTo(cx, cy + size * 0.42);
+  ctx.lineTo(cx - size * 0.24, cy + size * 0.24);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(102, 235, 255, 0.96)";
+  ctx.fillRect(cx - size * 0.27, cy - size * 0.12, size * 0.2, size * 0.055);
+  ctx.fillRect(cx + size * 0.07, cy - size * 0.12, size * 0.2, size * 0.055);
+  ctx.fillStyle = "rgba(92, 23, 30, 0.85)";
+  ctx.fillRect(cx - size * 0.13, cy + size * 0.26, size * 0.26, size * 0.04);
+}
+
+function drawJokerMask(ctx, cx, cy, size) {
+  ctx.fillStyle = "rgba(245, 244, 237, 0.95)";
+  ctx.strokeStyle = "rgba(77, 178, 102, 0.9)";
+  roundedMask(ctx, cx, cy + size * 0.02, size * 0.9, size * 1.02);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "rgba(77, 178, 102, 0.96)";
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.43, cy - size * 0.38);
+  ctx.quadraticCurveTo(cx - size * 0.16, cy - size * 0.72, cx + size * 0.02, cy - size * 0.45);
+  ctx.quadraticCurveTo(cx + size * 0.22, cy - size * 0.72, cx + size * 0.43, cy - size * 0.36);
+  ctx.lineTo(cx + size * 0.3, cy - size * 0.5);
+  ctx.quadraticCurveTo(cx, cy - size * 0.38, cx - size * 0.3, cy - size * 0.5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(202, 35, 65, 0.95)";
+  ctx.lineWidth = size * 0.045;
+  ctx.beginPath();
+  ctx.arc(cx, cy + size * 0.13, size * 0.24, 0.14 * Math.PI, 0.86 * Math.PI);
+  ctx.stroke();
+  drawEye(ctx, cx - size * 0.17, cy - size * 0.09, size * 0.07, "#272a30");
+  drawEye(ctx, cx + size * 0.17, cy - size * 0.09, size * 0.07, "#272a30");
 }
 
 function drawWebHeroMask(ctx, cx, cy, size) {

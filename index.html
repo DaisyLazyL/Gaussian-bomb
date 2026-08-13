@@ -16,29 +16,17 @@
             <p>Gesture editing for 3D Gaussian scenes</p>
           </div>
         </div>
+        <label class="language-switch">
+          <span>Language</span>
+          <select id="languageSelect">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </label>
         <div class="mode-actions">
           <button id="studioModeButton" class="secondary-button is-active">Studio</button>
           <button id="gameModeButton" class="primary-button">Game mode</button>
         </div>
-
-        <section class="panel" id="importPanel">
-          <div class="panel-title">
-            <span>Import 3DGS</span>
-            <span class="status-dot" id="fileStatusDot"></span>
-          </div>
-          <label class="drop-zone" id="dropZone">
-            <input id="fileInput" type="file" accept=".ply,.splat,.ksplat" />
-            <span class="upload-icon">+</span>
-            <strong>Choose or drop a scene</strong>
-            <small>PLY and SPLAT preview now. KSPLAT hook is reserved.</small>
-          </label>
-          <div class="file-meta" id="fileMeta">Demo Gaussian cloud is loaded.</div>
-          <div class="game-room-box game-only">
-            <strong id="roomStatus">Create a game room, then upload the shared scene.</strong>
-            <button id="copyRoomLink" class="secondary-button btn-full" disabled>Copy invite link</button>
-            <small id="roomLinkText">Invited players open the link and enter Game mode directly.</small>
-          </div>
-        </section>
 
         <section class="panel">
           <div class="panel-title">
@@ -91,6 +79,9 @@
             <label for="maskSelect">Camera mask</label>
             <select id="maskSelect">
               <option value="none">None</option>
+              <option value="thanos">Thanos</option>
+              <option value="ironMan">Iron Man</option>
+              <option value="joker">Joker</option>
               <option value="webHero">Web Hero</option>
               <option value="tinyOfficer">Tiny Officer</option>
               <option value="pixelFace">Pixel Face</option>
@@ -100,44 +91,11 @@
           <div class="hint-line">Pinch thumb and index finger to edit. Shift-drag is the fallback simulator.</div>
         </section>
 
-        <section class="panel game-only" id="gamePanel">
-          <div class="panel-title">
-            <span>Game Challenge</span>
-            <span class="pill" id="competitionPill">3 tries</span>
-          </div>
-          <div class="hint-line" id="gameHint">Invite friends to pinch this same scene. Each player gets 3 tries, 15 seconds per try. Best score ranks.</div>
-          <label class="field-row">
-            <span>Nickname</span>
-            <input id="playerName" type="text" maxlength="18" placeholder="Your name" />
-          </label>
-          <div class="competition-scoreboard">
-            <div>
-              <span id="competitionTimer">15.0</span>
-              <small>seconds</small>
-            </div>
-            <div>
-              <span id="competitionScore">0</span>
-              <small>creativity</small>
-            </div>
-          </div>
-          <div class="try-row">
-            <span id="triesLeft">3 tries left</span>
-            <span id="bestScore">Best 0</span>
-          </div>
-          <button id="competitionStart" class="primary-button btn-full">Start 15s try</button>
-          <div class="competition-breakdown" id="competitionBreakdown">
-            Coverage 0 · Variety 0 · Rhythm 0
-          </div>
-          <ol class="leaderboard" id="leaderboard"></ol>
-        </section>
-
         <section class="panel">
           <div class="panel-title">
             <span>Record Demo</span>
-            <span class="pill" id="recordPill">Ready</span>
           </div>
           <div class="record-actions">
-            <button id="recordToggle" class="primary-button">Start recording</button>
             <button id="recordDownload" class="secondary-button" disabled>Download</button>
             <button id="recordShare" class="secondary-button" disabled>Share</button>
           </div>
@@ -163,6 +121,13 @@
             </div>
           </div>
           <div class="interaction-state" id="interactionState">Import a scene or start gesture input</div>
+          <div class="stage-record-controls">
+            <button id="recordToggle" class="record-mini-button" title="Record the 3D canvas">
+              <span class="record-dot"></span>
+              <span>Record</span>
+            </button>
+            <span class="record-mini-status" id="recordPill">Ready</span>
+          </div>
           <div class="stage-game-controls game-only" id="stageGameControls">
             <div class="stage-timer">
               <span id="stageTimer">15.0</span>
@@ -172,6 +137,13 @@
           </div>
         </div>
         <canvas id="sceneCanvas"></canvas>
+        <label class="stage-import-tile" id="dropZone" title="Import 3DGS scene">
+          <input id="fileInput" type="file" accept=".ply,.splat,.ksplat" />
+          <canvas id="sceneThumb" aria-hidden="true"></canvas>
+          <span class="stage-import-plus">+</span>
+          <small id="fileMeta">Demo Gaussian cloud</small>
+          <span class="status-dot" id="fileStatusDot"></span>
+        </label>
         <div class="reticle" id="reticle"></div>
         <div class="score-fx" id="scoreFx"></div>
         <div class="gesture-feedback" id="gestureFeedback">
@@ -264,44 +236,41 @@
         <div class="toast" id="toast"></div>
       </section>
 
-      <aside class="inspector" aria-label="Gaussian inspector">
-        <section class="panel">
+      <aside class="inspector game-only" aria-label="Game challenge">
+        <section class="panel" id="gamePanel">
           <div class="panel-title">
-            <span>Gaussian Params</span>
+            <span>Game Challenge</span>
+            <span class="pill" id="competitionPill">3 tries</span>
           </div>
-          <div class="param-list">
-            <div><span>center mu</span><strong id="paramCenter">0.00, 0.00, 0.00</strong></div>
-            <div><span>scale sigma</span><strong id="paramScale">1.00</strong></div>
-            <div><span>opacity alpha</span><strong id="paramOpacity">1.00</strong></div>
-            <div><span>color / SH</span><strong id="paramColor">demo</strong></div>
+          <div class="hint-line" id="gameHint">Invite friends to pinch this same scene. Each player gets 3 tries, 15 seconds per try. Best score ranks.</div>
+          <div class="game-room-box game-only">
+            <strong id="roomStatus">Create a game room, then upload the shared scene.</strong>
+            <button id="copyRoomLink" class="secondary-button btn-full" disabled>Copy invite link</button>
+            <small id="roomLinkText">Invited players open the link and enter Game mode directly.</small>
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">
-            <span>Demo Flow</span>
+          <label class="field-row">
+            <span>Nickname</span>
+            <input id="playerName" type="text" maxlength="18" placeholder="Your name" />
+          </label>
+          <div class="competition-scoreboard">
+            <div>
+              <span id="competitionTimer">15.0</span>
+              <small>seconds</small>
+            </div>
+            <div>
+              <span id="competitionScore">0</span>
+              <small>creativity</small>
+            </div>
           </div>
-          <ol class="timeline">
-            <li class="is-current">Import 3DGS scene</li>
-            <li>Pinch to select a local Gaussian cluster</li>
-            <li>Open palm rotates; two hands zoom</li>
-            <li>Move, deform, erase, or recolor params</li>
-            <li>Show before / after edit state</li>
-          </ol>
-        </section>
-
-        <section class="panel">
-          <div class="panel-title">
-            <span>Prototype Status</span>
+          <div class="try-row">
+            <span id="triesLeft">3 tries left</span>
+            <span id="bestScore">Best 0</span>
           </div>
-          <div class="check-list">
-            <span>PLY Gaussian center preview</span>
-            <span>SPLAT binary preview</span>
-            <span>Local parameter editing</span>
-            <span>Camera gesture hook</span>
-            <span>Fist hammer gesture</span>
-            <span>Shift-drag fallback for live demos</span>
+          <button id="competitionStart" class="primary-button btn-full">Start 15s try</button>
+          <div class="competition-breakdown" id="competitionBreakdown">
+            Coverage 0 - Variety 0 - Rhythm 0
           </div>
+          <ol class="leaderboard" id="leaderboard"></ol>
         </section>
       </aside>
     </main>
