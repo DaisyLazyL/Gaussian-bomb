@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PinchGS</title>
-    <link rel="stylesheet" href="./src/styles.css" />
+    <link rel="stylesheet" href="./src/styles.css?v=scene-library-wasd-legend" />
   </head>
   <body>
     <main class="app-shell">
@@ -24,13 +24,16 @@
           </select>
         </label>
         <div class="mode-actions">
-          <button id="studioModeButton" class="secondary-button is-active">Studio</button>
-          <button id="gameModeButton" class="primary-button">Game mode</button>
+          <button id="studioModeButton" class="secondary-button is-active">Free</button>
+          <button id="roamToggle" class="secondary-button" title="Roam through the Gaussian scene">
+            <span>Walk</span>
+          </button>
         </div>
 
-        <section class="panel">
+        <section class="panel" id="editToolPanel">
           <div class="panel-title">
             <span>Edit Tool</span>
+            <span class="pill edit-collapse-pill">Gesture auto</span>
           </div>
           <div class="tool-grid" role="group" aria-label="Edit tool">
             <button class="tool-button is-active" data-tool="move" title="Move selected Gaussians">
@@ -122,6 +125,10 @@
           </div>
           <div class="interaction-state" id="interactionState">Import a scene or start gesture input</div>
           <div class="stage-record-controls">
+            <button id="gameModeButton" class="challenge-button" title="Start challenge mode">
+              <span>Challenge</span>
+              <small>3 tries</small>
+            </button>
             <button id="recordToggle" class="record-mini-button" title="Record the 3D canvas">
               <span class="record-dot"></span>
               <span>Record</span>
@@ -137,6 +144,11 @@
           </div>
         </div>
         <canvas id="sceneCanvas"></canvas>
+        <div class="roam-crosshair" id="roamCrosshair"></div>
+        <div class="roam-hud" id="roamHud">
+          <strong>ROAM MODE</strong>
+          <span>Palm to move · Pinch to look · Fist to brake</span>
+        </div>
         <label class="stage-import-tile" id="dropZone" title="Import 3DGS scene">
           <input id="fileInput" type="file" accept=".ply,.splat,.ksplat" />
           <canvas id="sceneThumb" aria-hidden="true"></canvas>
@@ -161,12 +173,13 @@
           </div>
         </div>
         <div class="legend">
-          <span><i class="swatch move"></i>Pinch move</span>
+          <span><i class="swatch move"></i>Pinch edit</span>
           <span><i class="swatch hammer"></i>Fist hammer</span>
-          <span><i class="swatch rotate"></i>Open palm rotate</span>
-          <span><i class="swatch zoom"></i>Two-hand zoom</span>
-          <span><i class="swatch deform"></i>Local deform</span>
-          <span><i class="swatch erase"></i>Opacity erase</span>
+          <span><i class="swatch rotate"></i>Open palm view</span>
+          <span><i class="swatch zoom"></i>OK switch</span>
+          <span><i class="swatch walk"></i>One/two hand walk</span>
+          <span><i class="swatch reset"></i>Thumb up reset</span>
+          <span><i class="swatch keys"></i>WASD walk</span>
         </div>
 
         <div class="onboarding is-visible" id="onboarding">
@@ -224,6 +237,12 @@
               <span id="resultScore">0</span>
               <small id="resultDelta">First try complete</small>
             </div>
+            <div class="result-title" id="resultTitle">Chaos Artist</div>
+            <div class="result-awards" id="resultAwards">
+              <span>Coverage 0</span>
+              <span>Variety 0</span>
+              <span>Rhythm 0</span>
+            </div>
             <div class="try-row">
               <span id="resultTries">2 tries left</span>
               <span id="resultBest">Best 0</span>
@@ -248,8 +267,27 @@
             <button id="copyRoomLink" class="secondary-button btn-full" disabled>Copy invite link</button>
             <small id="roomLinkText">Invited players open the link and enter Game mode directly.</small>
           </div>
+          <div class="scene-library">
+            <span id="sceneLibraryLabel">Built-in scenes</span>
+            <button class="scene-preset-button" data-scene="shanghai-office">Shanghai Office</button>
+            <button class="scene-preset-button" data-scene="gaussians">Gaussians</button>
+            <button class="scene-preset-button" data-scene="japanese-garden">Japanese Garden</button>
+          </div>
           <label class="field-row">
-            <span>Nickname</span>
+            <span id="characterLabel">Character</span>
+            <select id="characterSelect">
+              <option value="none">None</option>
+              <option value="thanos">Thanos</option>
+              <option value="ironMan">Iron Man</option>
+              <option value="joker">Joker</option>
+              <option value="webHero">Web Hero</option>
+              <option value="tinyOfficer">Tiny Officer</option>
+              <option value="pixelFace">Pixel Face</option>
+              <option value="starPilot">Star Pilot</option>
+            </select>
+          </label>
+          <label class="field-row">
+            <span id="playerNameLabel">Nickname</span>
             <input id="playerName" type="text" maxlength="18" placeholder="Your name" />
           </label>
           <div class="competition-scoreboard">
@@ -275,6 +313,6 @@
       </aside>
     </main>
 
-    <script type="module" src="./src/app.js"></script>
+    <script type="module" src="./src/app.js?v=scene-library-wasd-legend"></script>
   </body>
 </html>

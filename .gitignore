@@ -5,6 +5,7 @@ yarn-error.log*
 .pinchgs*.log
 .pinchgs*.pid
 .pinchgs*.job
+.codex-*.log
 
 validation/
 assets/

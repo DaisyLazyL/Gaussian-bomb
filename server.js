@@ -17,6 +17,7 @@ const mimeTypes = {
 };
 
 const defaultRoom = "default";
+const maxSceneSize = 260 * 1024 * 1024;
 const rooms = new Map([[defaultRoom, { scores: [], scene: null }]]);
 
 const server = http.createServer((req, res) => {
@@ -58,6 +59,7 @@ const server = http.createServer((req, res) => {
 
     res.writeHead(200, {
       "Content-Type": mimeTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream",
+      "Cache-Control": "no-store",
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp"
     });
@@ -140,7 +142,7 @@ function handleRoomScene(req, res, roomId) {
   let size = 0;
   req.on("data", chunk => {
     size += chunk.length;
-    if (size > 80 * 1024 * 1024) req.destroy();
+    if (size > maxSceneSize) req.destroy();
     chunks.push(chunk);
   });
   req.on("end", () => {
@@ -148,6 +150,7 @@ function handleRoomScene(req, res, roomId) {
       name: decodeURIComponent(req.headers["x-scene-name"] || "scene.ply"),
       buffer: Buffer.concat(chunks)
     };
+    room.scores = [];
     sendJson(res, { ok: true, roomId, name: room.scene.name, size: room.scene.buffer.length });
   });
 }

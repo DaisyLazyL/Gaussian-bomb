@@ -25,6 +25,8 @@ const ui = {
   cameraEmpty: document.querySelector("#cameraEmpty"),
   handOverlay: document.querySelector("#handOverlay"),
   maskSelect: document.querySelector("#maskSelect"),
+  characterSelect: document.querySelector("#characterSelect"),
+  characterLabel: document.querySelector("#characterLabel"),
   handStatus: document.querySelector("#handStatus"),
   pinchStatus: document.querySelector("#pinchStatus"),
   pinchMeter: document.querySelector("#pinchMeter"),
@@ -37,6 +39,9 @@ const ui = {
   onboardingSkip: document.querySelector("#onboardingSkip"),
   onboardingClose: document.querySelector("#onboardingClose"),
   recordPill: document.querySelector("#recordPill"),
+  roamToggle: document.querySelector("#roamToggle"),
+  roamCrosshair: document.querySelector("#roamCrosshair"),
+  roamHud: document.querySelector("#roamHud"),
   recordToggle: document.querySelector("#recordToggle"),
   recordDownload: document.querySelector("#recordDownload"),
   recordShare: document.querySelector("#recordShare"),
@@ -62,18 +67,26 @@ const ui = {
   tryResultClose: document.querySelector("#tryResultClose"),
   resultScore: document.querySelector("#resultScore"),
   resultDelta: document.querySelector("#resultDelta"),
+  resultTitle: document.querySelector("#resultTitle"),
+  resultAwards: document.querySelector("#resultAwards"),
   resultTries: document.querySelector("#resultTries"),
   resultBest: document.querySelector("#resultBest"),
   resultLeaderboard: document.querySelector("#resultLeaderboard"),
   resultNextTry: document.querySelector("#resultNextTry"),
   toast: document.querySelector("#toast"),
+  stage: document.querySelector(".stage"),
   leaderboard: document.querySelector("#leaderboard"),
   roomStatus: document.querySelector("#roomStatus"),
   copyRoomLink: document.querySelector("#copyRoomLink"),
   roomLinkText: document.querySelector("#roomLinkText")
 };
 
-const MAX_POINTS = 260000;
+const MAX_POINTS = 900000;
+const BUILT_IN_SCENES = {
+  "shanghai-office": { name: "Shanghai Office", zhName: "上海办公室", file: "/scenes/shanghai-office.ply" },
+  gaussians: { name: "Gaussians", zhName: "Gaussians", file: "/scenes/gaussians.ply" },
+  "japanese-garden": { name: "Japanese Garden", zhName: "日式园林", file: "/scenes/japanese-garden.ply" }
+};
 const state = {
   lang: localStorage.getItem("pinchgs-lang") || "en",
   mode: "studio",
@@ -84,6 +97,7 @@ const state = {
   tool: "move",
   selected: new Set(),
   pointer: { down: false, editing: false, lastX: 0, lastY: 0 },
+  keyboard: { keys: new Set(), lastWalkAt: 0, lastFeedbackAt: 0 },
   gesture: {
     active: false,
     preparing: false,
@@ -103,12 +117,36 @@ const state = {
     lastFistY: 0,
     lastHammerAt: 0,
     framesWithoutHand: 0,
+    recognizer: null,
     landmarker: null,
     faceLandmarker: null
   },
+  handedness: "",
+  recognizedGesture: "",
   mask: "none",
+  importSourceCount: 0,
+  activeBuiltInScene: "",
   face: { x: 0.5, y: 0.58, size: 0.28, confidence: 0 },
   camera: { yaw: -0.48, pitch: 0.32, distance: 4.2, target: [0, 0, 0] },
+  freeView: { yaw: 0, pitch: 0 },
+  roam: {
+    active: false,
+    savedCamera: null,
+    lookActive: false,
+    lastLookX: 0,
+    lastLookY: 0,
+    lastMoveAt: 0,
+    speedBoostUntil: 0
+  },
+  modeSwitch: {
+    okStartedAt: 0,
+    cooldownUntil: 0,
+    target: ""
+  },
+  viewReset: {
+    startedAt: 0,
+    cooldownUntil: 0
+  },
   competition: {
     active: false,
     durationMs: 15000,
@@ -123,8 +161,16 @@ const state = {
     pulses: 0,
     motion: 0,
     rhythm: 0,
+    lastCoverage: 0,
+    lastVariety: 0,
+    lastRhythmScore: 0,
+    lastSpatialPlay: 0,
     lastEditAt: 0,
     submitted: false
+  },
+  leaderboard: [],
+  fx: {
+    shakeTimer: 0
   },
   recording: {
     active: false,
@@ -149,16 +195,20 @@ const translations = {
   en: {
     brandSubtitle: "Gesture editing for 3D Gaussian scenes",
     language: "Language",
-    studio: "Studio",
-    gameMode: "Game mode",
+    studio: "Free",
+    gameMode: "Challenge",
     importTitle: "Import 3DGS",
     chooseScene: "Choose or drop a scene",
     importHint: "PLY and SPLAT preview now. KSPLAT hook is reserved.",
     demoLoaded: "Demo Gaussian cloud is loaded.",
     roomEmpty: "Create a game room, then upload the shared scene.",
+    sceneLibrary: "Built-in scenes",
+    sceneLoading: name => `Loading ${name}...`,
+    sceneLoaded: name => `${name} loaded for this challenge.`,
     copyInvite: "Copy invite link",
     roomLinkHint: "Invited players open the link and enter Game mode directly.",
     editTool: "Edit Tool",
+    gestureAuto: "Gesture auto",
     move: "Move",
     deform: "Deform",
     erase: "Erase",
@@ -174,6 +224,7 @@ const translations = {
     stopCamera: "Stop camera",
     resetScene: "Reset scene",
     cameraMask: "Camera mask",
+    character: "Character",
     gestureHint: "Pinch thumb and index finger to edit. Shift-drag is the fallback simulator.",
     gameChallenge: "Game Challenge",
     tries: "3 tries",
@@ -191,7 +242,7 @@ const translations = {
     gaussians: "Gaussians",
     selected: "Selected",
     importOrGesture: "Import a scene or start gesture input",
-    studioReady: "Studio mode. Import a scene or start gesture input.",
+    studioReady: "Free mode. Import a scene or start gesture input.",
     toolPrefix: "Tool",
     sceneReset: "Scene reset to imported state.",
     roomReady: roomId => `Room ${roomId}: shared scene is ready.`,
@@ -235,6 +286,14 @@ const translations = {
     scoreSavedLocalDetail: "Leaderboard server is not reachable right now.",
     noRanking: "No ranking yet",
     noScores: "No scores yet",
+    titleChaos: "Chaos Artist",
+    titleSmash: "Smash Master",
+    titleSpatial: "Spatial Wizard",
+    titleRhythm: "Rhythm Breaker",
+    titleSoft: "Soft Destroyer",
+    videoHudMode: "PinchGS Challenge",
+    videoHudBest: score => `Best ${score.toLocaleString()}`,
+    videoHudScore: score => `Score ${score.toLocaleString()}`,
     starting: "Starting...",
     loadingTracking: "Loading gesture + face tracking...",
     cameraLoadingState: "Camera enabled. Loading MediaPipe gesture and face tracking...",
@@ -258,6 +317,32 @@ const translations = {
     shareCancelled: "Share was cancelled. You can still download the video.",
     record: "Record",
     recordCanvas: "Record the 3D canvas",
+    roam: "Walk",
+    exitRoam: "Exit walk",
+    roamCanvas: "Walk through the Gaussian scene",
+    roamMode: "WALK MODE",
+    roamHint: "One open hand forward · Two hands backward · Pinch to look",
+    roamOnTitle: "Walk mode",
+    roamOnDetail: "Show one open hand to move forward. Show two hands to step back.",
+    roamOffTitle: "Free mode",
+    roamOffDetail: "Pinch gestures are back to editing Gaussians.",
+    roamMoving: "Walking",
+    roamMovingDetail: "One open hand moves forward. Two hands move backward.",
+    roamForward: "Forward",
+    roamBackward: "Back",
+    roamIdle: "One hand forward · Two hands back",
+    roamLooking: "Looking around",
+    roamBrake: "Stop",
+    roamBrakeDetail: "Release the walk gesture to stop.",
+    okGesture: "OK gesture",
+    modeSwitchHold: "Hold OK to switch mode",
+    switchingToWalk: "Switching to Walk",
+    switchingToFree: "Switching to Free",
+    modeSwitchDetail: progress => `Hold for 1 second. ${progress}%`,
+    resetView: "Reset view",
+    resetViewHold: "Hold thumbs up to reset view",
+    resetViewDone: "View reset",
+    resetViewDetail: progress => `Return the Gaussian model to center. ${progress}%`,
     recording: "Recording",
     recorded: "Recorded",
     stop: "Stop",
@@ -290,8 +375,8 @@ const translations = {
     rotateMode: "Rotate mode",
     rotateModeDetail: "Move your open palm to rotate the scene.",
     rotating: "Rotating",
-    rotatingState: "Open palm rotate: move your hand to orbit the scene.",
-    rotatingDetail: "Pinch to edit, or use two hands to zoom.",
+    rotatingState: "Open palm view: turn the scene in place.",
+    rotatingDetail: "This changes the free view only. Walk mode uses camera looking.",
     zoomMode: "Zoom mode",
     zoomModeDetail: "Move both hands apart or together.",
     zooming: "Zooming",
@@ -305,12 +390,15 @@ const translations = {
     hammerSmash: "Hammer smash",
     hammerState: selected => `Hammer smash: ${selected.toLocaleString()} Gaussians crushed`,
     hammerDetail: selected => `${selected.toLocaleString()} Gaussians crushed.`,
-    legendMove: "Pinch move",
+    keyboardWalking: "Keyboard walking",
+    keyboardWalkingDetail: keys => `WASD active: ${keys}.`,
+    legendMove: "Pinch edit",
     legendHammer: "Fist hammer",
-    legendRotate: "Open palm rotate",
-    legendZoom: "Two-hand zoom",
-    legendDeform: "Local deform",
-    legendErase: "Opacity erase",
+    legendRotate: "Open palm view",
+    legendZoom: "OK switch mode",
+    legendDeform: "One/two hand walk",
+    legendErase: "Thumb up reset",
+    legendKeys: "WASD walk",
     onboardingTitle: "How to use PinchGS",
     stepCameraTitle: "Start camera",
     stepCameraBody: "Allow browser camera permission.",
@@ -321,7 +409,7 @@ const translations = {
     stepHammerTitle: "Fist hammer",
     stepHammerBody: "Make a fist and punch downward to smash Gaussians.",
     stepPalmTitle: "Open palm",
-    stepPalmBody: "Move one open hand to rotate the scene.",
+    stepPalmBody: "In Walk mode, one open hand moves forward; two hands move backward.",
     stepTwoHandsTitle: "Two hands",
     stepTwoHandsBody: "Move hands apart or together to zoom.",
     skip: "Skip",
@@ -361,16 +449,20 @@ const translations = {
   zh: {
     brandSubtitle: "用手势编辑 3D Gaussian 场景",
     language: "语言",
-    studio: "普通模式",
-    gameMode: "游戏模式",
+    studio: "自由",
+    gameMode: "挑战",
     importTitle: "导入 3DGS",
     chooseScene: "选择或拖入场景",
     importHint: "当前支持 PLY 和 SPLAT 预览，KSPLAT 入口已预留。",
     demoLoaded: "已加载 Demo 高斯点云。",
     roomEmpty: "创建游戏房间后，先上传大家一起挑战的场景。",
+    sceneLibrary: "内置场景",
+    sceneLoading: name => `正在加载 ${name}...`,
+    sceneLoaded: name => `${name} 已作为本次挑战场景。`,
     copyInvite: "复制邀请链接",
     roomLinkHint: "朋友打开链接后会直接进入游戏模式。",
     editTool: "编辑工具",
+    gestureAuto: "手势自动",
     move: "移动",
     deform: "变形",
     erase: "擦除",
@@ -386,6 +478,7 @@ const translations = {
     stopCamera: "关闭摄像头",
     resetScene: "重置场景",
     cameraMask: "摄像头面具",
+    character: "角色",
     gestureHint: "捏合拇指和食指开始编辑。Shift 拖拽可作为演示备用操作。",
     gameChallenge: "游戏挑战",
     tries: "3 次机会",
@@ -403,7 +496,7 @@ const translations = {
     gaussians: "高斯点",
     selected: "已选中",
     importOrGesture: "导入场景或打开手势输入",
-    studioReady: "普通模式。导入场景或打开手势输入。",
+    studioReady: "自由模式。导入场景或打开手势输入。",
     toolPrefix: "工具",
     sceneReset: "场景已重置到导入时的状态。",
     roomReady: roomId => `房间 ${roomId}：共享场景已准备好。`,
@@ -447,6 +540,14 @@ const translations = {
     scoreSavedLocalDetail: "当前连接不到排行榜服务。",
     noRanking: "暂无排名",
     noScores: "暂无分数",
+    titleChaos: "混沌艺术家",
+    titleSmash: "重击大师",
+    titleSpatial: "空间巫师",
+    titleRhythm: "节奏破坏者",
+    titleSoft: "柔性破坏者",
+    videoHudMode: "PinchGS 挑战",
+    videoHudBest: score => `最高分 ${score.toLocaleString()}`,
+    videoHudScore: score => `当前分 ${score.toLocaleString()}`,
     starting: "正在启动...",
     loadingTracking: "正在加载手势 + 人脸识别...",
     cameraLoadingState: "摄像头已打开，正在加载 MediaPipe 手势和人脸识别...",
@@ -470,6 +571,32 @@ const translations = {
     shareCancelled: "分享已取消。你仍然可以下载视频。",
     record: "录制",
     recordCanvas: "录制 3D 画布",
+    roam: "行走",
+    exitRoam: "退出行走",
+    roamCanvas: "在 Gaussian 场景中行走",
+    roamMode: "行走模式",
+    roamHint: "单手张掌前进 · 双手后退 · 捏合转头",
+    roamOnTitle: "行走模式",
+    roamOnDetail: "伸出一只张开的手前进，伸出两只手后退。",
+    roamOffTitle: "自由模式",
+    roamOffDetail: "捏合手势已恢复为编辑高斯点。",
+    roamMoving: "行走中",
+    roamMovingDetail: "单手张掌前进；双手后退。",
+    roamForward: "前进",
+    roamBackward: "后退",
+    roamIdle: "单手前进 · 双手后退",
+    roamLooking: "转头中",
+    roamBrake: "停止",
+    roamBrakeDetail: "松开行走手势即可停止。",
+    okGesture: "OK 手势",
+    modeSwitchHold: "保持 OK 手势切换模式",
+    switchingToWalk: "切换到行走",
+    switchingToFree: "切换到自由",
+    modeSwitchDetail: progress => `保持 1 秒。${progress}%`,
+    resetView: "重置视图",
+    resetViewHold: "保持大拇指向上重置视图",
+    resetViewDone: "视图已重置",
+    resetViewDetail: progress => `把高斯模型回到画面中间。${progress}%`,
     recording: "录制中",
     recorded: "已录制",
     stop: "停止",
@@ -502,8 +629,8 @@ const translations = {
     rotateMode: "旋转模式",
     rotateModeDetail: "移动张开的手掌来旋转场景。",
     rotating: "旋转中",
-    rotatingState: "张掌旋转：移动手来环绕查看场景。",
-    rotatingDetail: "可以捏合编辑，也可以用双手缩放。",
+    rotatingState: "张掌查看：原地转动场景预览。",
+    rotatingDetail: "这里只改变自由模式视角；行走模式才使用相机环绕查看。",
     zoomMode: "缩放模式",
     zoomModeDetail: "双手分开或靠近。",
     zooming: "缩放中",
@@ -517,12 +644,15 @@ const translations = {
     hammerSmash: "锤击成功",
     hammerState: selected => `锤击：${selected.toLocaleString()} 个高斯点被压碎`,
     hammerDetail: selected => `${selected.toLocaleString()} 个高斯点被压碎。`,
-    legendMove: "捏合移动",
+    keyboardWalking: "键盘行走",
+    keyboardWalkingDetail: keys => `WASD 正在移动：${keys}。`,
+    legendMove: "捏合编辑",
     legendHammer: "拳头锤",
-    legendRotate: "张掌旋转",
-    legendZoom: "双手缩放",
-    legendDeform: "局部变形",
-    legendErase: "透明擦除",
+    legendRotate: "张掌查看",
+    legendZoom: "OK 切模式",
+    legendDeform: "单/双手行走",
+    legendErase: "拇指向上重置",
+    legendKeys: "WASD 行走",
     onboardingTitle: "如何使用 PinchGS",
     stepCameraTitle: "打开摄像头",
     stepCameraBody: "允许浏览器使用摄像头。",
@@ -533,7 +663,7 @@ const translations = {
     stepHammerTitle: "拳头锤",
     stepHammerBody: "握拳后向下锤，砸碎高斯点。",
     stepPalmTitle: "张开手掌",
-    stepPalmBody: "移动一只张开的手来旋转场景。",
+    stepPalmBody: "行走模式下，单手张掌前进，双手后退。",
     stepTwoHandsTitle: "双手",
     stepTwoHandsBody: "双手分开或靠近来缩放场景。",
     skip: "跳过",
@@ -592,6 +722,15 @@ function setOptionText(value, label) {
   if (option) option.textContent = label;
 }
 
+function setButtonTrailingText(button, label) {
+  const textNode = button?.querySelector("span:last-child");
+  if (textNode) {
+    textNode.textContent = label;
+  } else if (button) {
+    button.textContent = label;
+  }
+}
+
 function triesText(count) {
   if (state.lang === "zh") return `${count} 次机会`;
   return `${count} ${count === 1 ? "try" : "tries"}`;
@@ -610,27 +749,41 @@ function breakdownText(coverage, variety, rhythm) {
   return `${t("coverage")} ${Math.round(coverage)} · ${t("variety")} ${Math.round(variety)} · ${t("rhythm")} ${Math.round(rhythm)}`;
 }
 
+function characterAccent() {
+  return {
+    thanos: "#b894ff",
+    ironMan: "#66ebff",
+    joker: "#77e08f",
+    webHero: "#ff5c68",
+    tinyOfficer: "#ffd166",
+    pixelFace: "#62d3ff",
+    starPilot: "#ffd166",
+    none: "#62d3ff"
+  }[state.mask] || "#62d3ff";
+}
+
 function applyLanguage() {
   document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
   setText(".brand p", "brandSubtitle");
   setText(".language-switch span", "language");
   ui.studioModeButton.textContent = t("studio");
-  ui.gameModeButton.textContent = t("gameMode");
+  ui.gameModeButton.innerHTML = `<span>${t("gameMode")}</span><small>${t("tries")}</small>`;
   ui.dropZone.title = t("chooseScene");
   if (!state.original || ui.fileMeta.textContent.includes("Demo") || ui.fileMeta.textContent.includes("Demo")) {
     ui.fileMeta.textContent = t("demoLoaded");
   }
   ui.copyRoomLink.textContent = t("copyInvite");
   setText("#roomLinkText", "roomLinkHint");
-  setText(".rail section:nth-of-type(2) .panel-title span", "editTool");
+  setText("#editToolPanel .panel-title span:first-child", "editTool");
+  setText("#editToolPanel .edit-collapse-pill", "gestureAuto");
   const toolLabels = { move: "move", deform: "deform", erase: "erase", paint: "paint" };
   document.querySelectorAll(".tool-button").forEach(button => {
     const icon = button.querySelector("span")?.outerHTML || "";
     button.innerHTML = `${icon}${t(toolLabels[button.dataset.tool])}`;
   });
-  setText(".range-row:nth-of-type(1) span", "brushRadius");
-  setText(".range-row:nth-of-type(2) span", "strength");
-  setText(".rail section:nth-of-type(3) .panel-title span:first-child", "gestureInput");
+  setText("#editToolPanel .range-row:nth-of-type(1) span", "brushRadius");
+  setText("#editToolPanel .range-row:nth-of-type(2) span", "strength");
+  setText(".rail section:nth-of-type(2) .panel-title span:first-child", "gestureInput");
   ui.gesturePill.textContent = state.gesture.cameraOn ? t("camera") : t("simulator");
   ui.cameraEmpty.textContent = t("cameraOff");
   ui.cameraToggle.textContent = state.gesture.cameraOn ? t("cameraOn") : t("startCamera");
@@ -638,30 +791,43 @@ function applyLanguage() {
   ui.resetScene.textContent = t("resetScene");
   setText(".mask-row label", "cameraMask");
   setOptionText("none", t("none"));
-  setText(".rail section:nth-of-type(3) .hint-line", "gestureHint");
+  if (ui.characterLabel) ui.characterLabel.textContent = t("character");
+  if (ui.characterSelect) ui.characterSelect.value = state.mask;
+  setText(".rail section:nth-of-type(2) .hint-line", "gestureHint");
   setText("#gamePanel .panel-title span:first-child", "gameChallenge");
   ui.competitionPill.textContent = state.competition.triesLeft > 0 ? triesText(state.competition.triesLeft) : t("done");
   setText("#gameHint", "gameHint");
-  setText("#gamePanel .field-row span", "nickname");
+  setText("#sceneLibraryLabel", "sceneLibrary");
+  document.querySelectorAll(".scene-preset-button").forEach(button => {
+    const scene = BUILT_IN_SCENES[button.dataset.scene];
+    if (scene) button.textContent = state.lang === "zh" ? scene.zhName : scene.name;
+  });
+  setText("#playerNameLabel", "nickname");
   setPlaceholder("#playerName", "yourName");
   setText(".competition-scoreboard div:first-child small", "seconds");
   setText(".competition-scoreboard div:last-child small", "creativity");
-  setText(".rail section:nth-of-type(5) .panel-title span", "recordDemo");
+  setText(".rail section:nth-of-type(3) .panel-title span", "recordDemo");
   ui.recordDownload.textContent = t("download");
   ui.recordShare.textContent = t("share");
   if (!state.recording.blob && !state.recording.active) ui.recordMeta.textContent = t("recordMetaReady");
   setText(".metrics div:nth-child(1) small", "gaussians");
   setText(".metrics div:nth-child(2) small", "selected");
   if (!state.gesture.cameraOn && !state.competition.active) ui.interactionState.textContent = state.mode === "game" ? t("gameReady") : t("studioReady");
-  ui.recordToggle.querySelector("span:last-child").textContent = state.recording.active ? t("stop") : state.recording.blob ? t("again") : t("record");
+  setButtonTrailingText(ui.recordToggle, state.recording.active ? t("stop") : state.recording.blob ? t("again") : t("record"));
   ui.recordToggle.title = t("recordCanvas");
   ui.recordPill.textContent = state.recording.active ? t("recording") : state.recording.blob ? t("recorded") : t("ready");
+  setButtonTrailingText(ui.roamToggle, state.roam.active ? t("exitRoam") : t("roam"));
+  ui.roamToggle.title = t("roamCanvas");
+  const roamHudTitle = ui.roamHud?.querySelector("strong");
+  const roamHudHint = ui.roamHud?.querySelector("span");
+  if (roamHudTitle) roamHudTitle.textContent = t("roamMode");
+  if (roamHudHint) roamHudHint.textContent = t("roamHint");
   setText(".stage-timer small", "sec");
   setText("#gestureFeedbackTitle", "waitingForHand");
   setText("#gestureFeedbackDetail", "startThenShow");
   ui.handStatus.textContent = t("handNotTracked");
   ui.pinchStatus.textContent = t("openHand");
-  const legendKeys = ["legendMove", "legendHammer", "legendRotate", "legendZoom", "legendDeform", "legendErase"];
+  const legendKeys = ["legendMove", "legendHammer", "legendRotate", "legendZoom", "legendDeform", "legendErase", "legendKeys"];
   document.querySelectorAll(".legend span").forEach((item, index) => {
     const swatch = item.querySelector("i")?.outerHTML || "";
     item.innerHTML = `${swatch}${t(legendKeys[index])}`;
@@ -699,6 +865,7 @@ function applyLanguage() {
   ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("gotIt") : t("gotItImport");
   setText("#tryResultModal .panel-title span", "tryResult");
   if (!state.competition.score) ui.resultDelta.textContent = t("firstTryComplete");
+  if (ui.resultTitle && !state.competition.score) ui.resultTitle.textContent = t("titleChaos");
   setText("#resultNextTry", "nextTry");
 }
 
@@ -729,7 +896,7 @@ void main() {
   vSelected = aSelected;
 }
 `, `
-precision mediump float;
+precision highp float;
 varying vec3 vColor;
 varying float vOpacity;
 varying float vSelected;
@@ -737,9 +904,12 @@ void main() {
   vec2 uv = gl_PointCoord * 2.0 - 1.0;
   float d = dot(uv, uv);
   if (d > 1.0) discard;
-  float gaussian = exp(-d * 3.2);
-  vec3 color = mix(vColor, vec3(0.38, 0.83, 1.0), vSelected * 0.55);
-  gl_FragColor = vec4(color, gaussian * vOpacity);
+  float gaussian = exp(-d * 4.4);
+  float edge = smoothstep(1.0, 0.06, d);
+  float alpha = clamp(gaussian * edge * vOpacity * 0.92, 0.0, 0.96);
+  vec3 base = pow(max(vColor, vec3(0.0)), vec3(0.88));
+  vec3 color = mix(base, vec3(0.38, 0.83, 1.0), vSelected * 0.55);
+  gl_FragColor = vec4(color * alpha, alpha);
 }
 `);
 
@@ -841,7 +1011,15 @@ function bindUi() {
   ui.cameraStop.addEventListener("click", stopCameraMode);
   ui.maskSelect.addEventListener("change", () => {
     state.mask = ui.maskSelect.value;
+    if (ui.characterSelect) ui.characterSelect.value = state.mask;
   });
+  if (ui.characterSelect) {
+    ui.characterSelect.value = state.mask;
+    ui.characterSelect.addEventListener("change", () => {
+      state.mask = ui.characterSelect.value;
+      ui.maskSelect.value = state.mask;
+    });
+  }
   ui.onboardingStart.addEventListener("click", () => {
     hideOnboarding();
     startCameraMode();
@@ -862,10 +1040,14 @@ function bindUi() {
     if (state.competition.triesLeft > 0) startCompetition();
   });
   ui.recordToggle.addEventListener("click", toggleRecording);
+  ui.roamToggle.addEventListener("click", toggleRoamMode);
   ui.recordDownload.addEventListener("click", downloadRecording);
   ui.recordShare.addEventListener("click", shareRecording);
   ui.competitionStart.addEventListener("click", startCompetition);
   ui.stageCompetitionStart.addEventListener("click", startCompetition);
+  document.querySelectorAll(".scene-preset-button").forEach(button => {
+    button.addEventListener("click", () => loadBuiltInScene(button.dataset.scene));
+  });
 
   canvas.addEventListener("pointerdown", event => {
     canvas.setPointerCapture(event.pointerId);
@@ -908,6 +1090,33 @@ function bindUi() {
   }, { passive: false });
 
   window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("keydown", handleKeyDown);
+  window.addEventListener("keyup", handleKeyUp);
+  window.addEventListener("blur", () => state.keyboard.keys.clear());
+}
+
+function isTypingTarget(target) {
+  const tagName = target?.tagName;
+  return target?.isContentEditable || tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+}
+
+function normalizedWalkKey(event) {
+  const key = event.key.toLowerCase();
+  return key === "w" || key === "a" || key === "s" || key === "d" ? key : "";
+}
+
+function handleKeyDown(event) {
+  const key = normalizedWalkKey(event);
+  if (!key || isTypingTarget(event.target)) return;
+  state.keyboard.keys.add(key);
+  if (state.roam.active) event.preventDefault();
+}
+
+function handleKeyUp(event) {
+  const key = normalizedWalkKey(event);
+  if (!key) return;
+  state.keyboard.keys.delete(key);
+  if (state.roam.active) event.preventDefault();
 }
 
 async function initializeModeFromUrl() {
@@ -921,6 +1130,7 @@ async function initializeModeFromUrl() {
 }
 
 function enterStudioMode() {
+  if (state.roam.active) exitRoamMode();
   state.mode = "studio";
   document.body.classList.add("studio-mode");
   document.body.classList.remove("game-mode");
@@ -930,6 +1140,7 @@ function enterStudioMode() {
 }
 
 async function enterGameMode(roomId = "") {
+  if (state.roam.active) exitRoamMode();
   state.mode = "game";
   document.body.classList.add("game-mode");
   document.body.classList.remove("studio-mode");
@@ -1002,14 +1213,16 @@ function inviteUrl() {
 
 async function uploadRoomScene(filename, buffer) {
   ui.roomStatus.textContent = t("uploadShared");
-  await fetch(`/api/rooms/${state.roomId}/scene`, {
+  const response = await fetch(`/api/rooms/${state.roomId}/scene`, {
     method: "POST",
     headers: { "X-Scene-Name": encodeURIComponent(filename) },
     body: buffer
   });
+  if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
   state.roomSceneLoaded = true;
   updateRoomUi();
   updateTryUi();
+  await loadLeaderboard();
 }
 
 async function loadRoomScene() {
@@ -1049,7 +1262,40 @@ async function loadFile(file) {
   }
 }
 
+async function loadBuiltInScene(sceneId) {
+  const scene = BUILT_IN_SCENES[sceneId];
+  if (!scene) return;
+
+  const label = state.lang === "zh" ? scene.zhName : scene.name;
+  const buttons = Array.from(document.querySelectorAll(".scene-preset-button"));
+  buttons.forEach(button => {
+    button.disabled = true;
+  });
+  ui.interactionState.textContent = t("sceneLoading", label);
+
+  try {
+    const response = await fetch(scene.file);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const buffer = await response.arrayBuffer();
+    const filename = `${label}.ply`;
+    loadSceneBuffer(buffer, filename, buffer.byteLength);
+    state.activeBuiltInScene = sceneId;
+    buttons.forEach(button => button.classList.toggle("is-active", button.dataset.scene === sceneId));
+    if (state.mode === "game" && state.roomId) {
+      await uploadRoomScene(filename, buffer);
+    }
+    ui.interactionState.textContent = t("sceneLoaded", label);
+  } catch (error) {
+    ui.interactionState.textContent = t("importFailed", error.message);
+  } finally {
+    buttons.forEach(button => {
+      button.disabled = false;
+    });
+  }
+}
+
 function loadSceneBuffer(buffer, filename, size = buffer.byteLength) {
+  state.importSourceCount = 0;
   const extension = filename.split(".").pop().toLowerCase();
   let parsed;
 
@@ -1061,13 +1307,15 @@ function loadSceneBuffer(buffer, filename, size = buffer.byteLength) {
     throw new Error("KSPLAT needs its dedicated decoder. The import slot is ready.");
   }
 
-  state.points = normalizePoints(parsed);
+  state.points = normalizePoints(flipImportedY(parsed));
   state.original = clonePoints(state.points);
   state.selected.clear();
   state.thumbnailReady = false;
   updateStats();
   ui.fileStatusDot.classList.add("is-ready");
-  ui.fileMeta.textContent = `${filename} | ${state.points.count.toLocaleString()} gaussians | ${(size / 1024 / 1024).toFixed(2)} MB`;
+  const sourceCount = state.importSourceCount || state.points.count;
+  const samplingNote = sourceCount > state.points.count ? ` / ${sourceCount.toLocaleString()} sampled` : "";
+  ui.fileMeta.textContent = `${filename} | ${state.points.count.toLocaleString()}${samplingNote} gaussians | ${(size / 1024 / 1024).toFixed(2)} MB`;
   ui.interactionState.textContent = t("imported");
   window.setTimeout(updateSceneThumbnail, 80);
 }
@@ -1102,6 +1350,13 @@ function initDemoScene() {
   updateStats();
 }
 
+function flipImportedY(points) {
+  for (let i = 0; i < points.count; i++) {
+    points.positions[i * 3 + 1] *= -1;
+  }
+  return points;
+}
+
 function parsePly(buffer) {
   const bytes = new Uint8Array(buffer);
   const marker = new TextEncoder().encode("end_header");
@@ -1133,7 +1388,9 @@ function parsePly(buffer) {
   if (!formatLine || !vertexLine) throw new Error("PLY format or vertex count is missing.");
 
   const format = formatLine.split(/\s+/)[1];
-  const count = Math.min(Number(vertexLine.split(/\s+/)[2]), MAX_POINTS);
+  const sourceCount = Number(vertexLine.split(/\s+/)[2]);
+  const count = Math.min(sourceCount, MAX_POINTS);
+  state.importSourceCount = sourceCount;
   const properties = [];
   let inVertex = false;
 
@@ -1153,25 +1410,26 @@ function parsePly(buffer) {
     throw new Error("PLY vertices need x, y, and z fields.");
   }
 
-  if (format === "ascii") return parseAsciiPly(bytes, headerEnd, count, properties);
-  if (format === "binary_little_endian") return parseBinaryPly(buffer, headerEnd, count, properties);
+  if (format === "ascii") return parseAsciiPly(bytes, headerEnd, sourceCount, count, properties);
+  if (format === "binary_little_endian") return parseBinaryPly(buffer, headerEnd, sourceCount, count, properties);
   throw new Error(`${format} PLY is not supported yet.`);
 }
 
-function parseAsciiPly(bytes, start, count, properties) {
+function parseAsciiPly(bytes, start, sourceCount, count, properties) {
   const body = new TextDecoder().decode(bytes.slice(start));
   const lines = body.trim().split(/\r?\n/);
   const result = emptyPoints(count);
 
   for (let i = 0; i < count; i++) {
-    const values = lines[i].trim().split(/\s+/).map(Number);
+    const sourceIndex = sampleSourceIndex(i, count, sourceCount);
+    const values = lines[sourceIndex].trim().split(/\s+/).map(Number);
     fillPointFromValues(i, values, properties, result);
   }
 
   return result;
 }
 
-function parseBinaryPly(buffer, start, count, properties) {
+function parseBinaryPly(buffer, start, sourceCount, count, properties) {
   const view = new DataView(buffer, start);
   const offsets = [];
   let stride = 0;
@@ -1184,7 +1442,8 @@ function parseBinaryPly(buffer, start, count, properties) {
   const result = emptyPoints(count);
 
   for (let i = 0; i < count; i++) {
-    const base = i * stride;
+    const sourceIndex = sampleSourceIndex(i, count, sourceCount);
+    const base = sourceIndex * stride;
     const values = properties.map((property, index) => readProperty(view, base + offsets[index], property.type));
     fillPointFromValues(i, values, properties, result);
   }
@@ -1194,13 +1453,16 @@ function parseBinaryPly(buffer, start, count, properties) {
 
 function parseSplat(buffer) {
   const rowLength = 32;
-  const count = Math.min(Math.floor(buffer.byteLength / rowLength), MAX_POINTS);
+  const sourceCount = Math.floor(buffer.byteLength / rowLength);
+  const count = Math.min(sourceCount, MAX_POINTS);
+  state.importSourceCount = sourceCount;
   if (count <= 0) throw new Error("SPLAT file is empty.");
   const view = new DataView(buffer);
   const result = emptyPoints(count);
 
   for (let i = 0; i < count; i++) {
-    const base = i * rowLength;
+    const sourceIndex = sampleSourceIndex(i, count, sourceCount);
+    const base = sourceIndex * rowLength;
     result.positions[i * 3] = view.getFloat32(base, true);
     result.positions[i * 3 + 1] = view.getFloat32(base + 4, true);
     result.positions[i * 3 + 2] = view.getFloat32(base + 8, true);
@@ -1212,6 +1474,12 @@ function parseSplat(buffer) {
   }
 
   return result;
+}
+
+function sampleSourceIndex(index, count, sourceCount) {
+  if (count >= sourceCount) return index;
+  if (count <= 1) return 0;
+  return Math.min(sourceCount - 1, Math.round(index * (sourceCount - 1) / (count - 1)));
 }
 
 function emptyPoints(count) {
@@ -1294,10 +1562,41 @@ function normalizePoints(points) {
     positions[i * 3] = (positions[i * 3] - cx) * scale;
     positions[i * 3 + 1] = (positions[i * 3 + 1] - cy) * scale;
     positions[i * 3 + 2] = (positions[i * 3 + 2] - cz) * scale;
-    points.scales[i] = clamp(points.scales[i] * scale, 0.008, 0.2);
+    points.scales[i] = clamp(points.scales[i] * scale, 0.012, 0.24);
   }
 
   return points;
+}
+
+function applyKeyboardWalk(now = performance.now()) {
+  if (!state.roam.active || state.keyboard.keys.size === 0) {
+    state.keyboard.lastWalkAt = now;
+    return;
+  }
+
+  const keys = state.keyboard.keys;
+  const forward = (keys.has("w") ? 1 : 0) - (keys.has("s") ? 1 : 0);
+  const strafe = (keys.has("d") ? 1 : 0) - (keys.has("a") ? 1 : 0);
+  if (!forward && !strafe) {
+    state.keyboard.lastWalkAt = now;
+    return;
+  }
+
+  const dt = Math.min(48, Math.max(12, now - (state.keyboard.lastWalkAt || now)));
+  state.keyboard.lastWalkAt = now;
+  const yaw = state.camera.yaw;
+  const forwardVec = [-Math.sin(yaw), 0, -Math.cos(yaw)];
+  const rightVec = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  const speed = 0.0032 * dt;
+  state.camera.target[0] += (forwardVec[0] * forward + rightVec[0] * strafe) * speed;
+  state.camera.target[2] += (forwardVec[2] * forward + rightVec[2] * strafe) * speed;
+
+  if (now - state.keyboard.lastFeedbackAt > 220) {
+    const label = Array.from(keys).map(key => key.toUpperCase()).join("+");
+    ui.pinchStatus.textContent = label;
+    setGestureFeedback(t("keyboardWalking"), t("keyboardWalkingDetail", label), "hand");
+    state.keyboard.lastFeedbackAt = now;
+  }
 }
 
 function render(now) {
@@ -1306,14 +1605,15 @@ function render(now) {
   gl.clearColor(0.047, 0.051, 0.063, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.enable(gl.BLEND);
-  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   gl.disable(gl.DEPTH_TEST);
 
+  applyKeyboardWalk(now);
   gl.useProgram(program);
   bindAttributes();
   gl.uniformMatrix4fv(uniforms.viewProj, false, computeViewProjection());
   gl.uniform1f(uniforms.pixelRatio, window.devicePixelRatio || 1);
-  gl.uniform1f(uniforms.baseSize, 8);
+  gl.uniform1f(uniforms.baseSize, 5.8);
   gl.drawArrays(gl.POINTS, 0, state.points.count);
 
   state.fpsFrames++;
@@ -1348,7 +1648,35 @@ function composeRecordingFrame() {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, recCanvas.width, recCanvas.height);
   ctx.drawImage(canvas, 0, 0, recCanvas.width, recCanvas.height);
+  drawRecordingHud(ctx, recCanvas.width, recCanvas.height);
   drawRecordingCameraInset(ctx, recCanvas.width, recCanvas.height);
+}
+
+function drawRecordingHud(ctx, width, height) {
+  const ratio = window.devicePixelRatio || 1;
+  const pad = Math.round(18 * ratio);
+  const boxWidth = Math.round(Math.min(width * 0.34, 380 * ratio));
+  const boxHeight = Math.round(86 * ratio);
+  const accent = characterAccent();
+  const name = normalizedPlayerName() || t("anonymous");
+  const score = state.competition.active ? state.competition.score : state.competition.bestScore;
+  ctx.save();
+  roundedRectPath(ctx, pad, pad, boxWidth, boxHeight, Math.round(10 * ratio));
+  ctx.fillStyle = "rgba(10, 12, 16, 0.68)";
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = Math.max(2, 2 * ratio);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.font = `${Math.round(13 * ratio)}px Segoe UI, sans-serif`;
+  ctx.fillText(state.roam.active ? t("roamMode") : t("videoHudMode"), pad + 14 * ratio, pad + 24 * ratio);
+  ctx.fillStyle = "#f2f4f7";
+  ctx.font = `900 ${Math.round(24 * ratio)}px Segoe UI, sans-serif`;
+  ctx.fillText(name, pad + 14 * ratio, pad + 52 * ratio);
+  ctx.fillStyle = "rgba(242, 244, 247, 0.78)";
+  ctx.font = `800 ${Math.round(12 * ratio)}px Segoe UI, sans-serif`;
+  ctx.fillText(state.competition.active ? t("videoHudScore", score) : t("videoHudBest", score), pad + 14 * ratio, pad + 74 * ratio);
+  ctx.restore();
 }
 
 function drawRecordingCameraInset(ctx, width, height) {
@@ -1570,6 +1898,10 @@ async function startCompetition() {
   state.competition.pulses = 0;
   state.competition.motion = 0;
   state.competition.rhythm = 0;
+  state.competition.lastCoverage = 0;
+  state.competition.lastVariety = 0;
+  state.competition.lastRhythmScore = 0;
+  state.competition.lastSpatialPlay = 0;
   state.competition.lastEditAt = 0;
   state.competition.submitted = false;
 
@@ -1661,6 +1993,10 @@ function updateCompetitionFromEdit({ selected, center, dx, dy, freshSelection, a
   const variety = c.tools.size * 70 + Math.min(160, c.pulses * 12);
   const rhythm = Math.min(260, c.rhythm * 10 + c.motion * 0.12);
   const spatialPlay = Math.min(180, Math.hypot(center[0], center[1], center[2]) * 55);
+  c.lastCoverage = coverage;
+  c.lastVariety = variety;
+  c.lastRhythmScore = rhythm;
+  c.lastSpatialPlay = spatialPlay;
   c.score = Math.round(coverage + variety + rhythm + spatialPlay);
 
   ui.competitionScore.textContent = c.score.toLocaleString();
@@ -1708,12 +2044,27 @@ function showTryResult(delta, scores) {
   ui.resultDelta.textContent = delta > 0
     ? t("newBestDelta", delta)
     : t("belowBest", delta);
+  ui.resultTitle.textContent = performanceTitle();
+  ui.resultAwards.innerHTML = [
+    [t("coverage"), state.competition.lastCoverage],
+    [t("variety"), state.competition.lastVariety],
+    [t("rhythm"), state.competition.lastRhythmScore]
+  ].map(([label, value]) => `<span>${label} ${Math.round(value)}</span>`).join("");
   ui.resultTries.textContent = triesLeftText(state.competition.triesLeft);
   ui.resultBest.textContent = bestText(state.competition.bestScore);
   ui.resultNextTry.disabled = state.competition.triesLeft <= 0;
   ui.resultNextTry.textContent = state.competition.triesLeft > 0 ? t("nextTry") : t("allTriesUsed");
   ui.resultLeaderboard.innerHTML = leaderboardMarkup(scores);
   ui.tryResultModal.classList.add("is-visible");
+}
+
+function performanceTitle() {
+  const c = state.competition;
+  if (c.tools.has("hammer") || c.lastRhythmScore > 230) return t("titleSmash");
+  if (c.lastSpatialPlay > 130) return t("titleSpatial");
+  if (c.lastRhythmScore > c.lastCoverage && c.lastRhythmScore > c.lastVariety) return t("titleRhythm");
+  if (c.lastCoverage > 280 && c.lastVariety < 120) return t("titleSoft");
+  return t("titleChaos");
 }
 
 function hideTryResult() {
@@ -1724,7 +2075,30 @@ function showScoreFx(text, direction) {
   ui.scoreFx.textContent = text;
   ui.scoreFx.classList.remove("is-up", "is-down", "is-visible");
   ui.scoreFx.classList.add(direction === "up" ? "is-up" : "is-down", "is-visible");
+  ui.scoreFx.style.setProperty("--fx-color", characterAccent());
+  if (direction === "up") shakeStage(420);
   window.setTimeout(() => ui.scoreFx.classList.remove("is-visible"), 1200);
+}
+
+function triggerImpactFx(label = "SMASH") {
+  const rect = canvas.getBoundingClientRect();
+  const x = ((state.activeNdc[0] + 1) * 0.5) * rect.width;
+  const y = ((1 - state.activeNdc[1]) * 0.5) * rect.height;
+  const wave = document.createElement("div");
+  wave.className = "impact-wave";
+  wave.textContent = label;
+  wave.style.left = `${x}px`;
+  wave.style.top = `${y}px`;
+  wave.style.setProperty("--impact-color", characterAccent());
+  ui.stage.appendChild(wave);
+  window.setTimeout(() => wave.remove(), 760);
+  shakeStage(560);
+}
+
+function shakeStage(duration = 360) {
+  window.clearTimeout(state.fx.shakeTimer);
+  ui.stage.classList.add("is-shaking");
+  state.fx.shakeTimer = window.setTimeout(() => ui.stage.classList.remove("is-shaking"), duration);
 }
 
 async function submitScore() {
@@ -1764,6 +2138,7 @@ async function loadLeaderboard() {
 }
 
 function renderLeaderboard(scores) {
+  state.leaderboard = scores || [];
   ui.leaderboard.innerHTML = leaderboardMarkup(scores);
 }
 
@@ -1828,6 +2203,7 @@ async function startCameraMode() {
 }
 
 function stopCameraMode() {
+  if (state.roam.active) exitRoamMode();
   const stream = ui.cameraPreview.srcObject;
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
@@ -1884,7 +2260,7 @@ function startRecording() {
   state.recording.startedAt = Date.now();
 
   ui.recordPill.textContent = t("recording");
-  ui.recordToggle.querySelector("span:last-child").textContent = t("stop");
+  setButtonTrailingText(ui.recordToggle, t("stop"));
   ui.recordToggle.classList.add("is-recording");
   ui.recordDownload.disabled = true;
   ui.recordShare.disabled = true;
@@ -1900,6 +2276,57 @@ function startRecording() {
 
   recorder.addEventListener("stop", finalizeRecording);
   recorder.start(250);
+}
+
+function toggleRoamMode() {
+  if (state.roam.active) {
+    exitRoamMode();
+  } else {
+    enterRoamMode();
+  }
+}
+
+function enterRoamMode() {
+  endGesture();
+  bakeFreeViewIntoCamera();
+  state.mode = "studio";
+  document.body.classList.add("studio-mode");
+  document.body.classList.remove("game-mode");
+  state.roam.active = true;
+  state.roam.lookActive = false;
+  state.roam.lastMoveAt = performance.now();
+  state.roam.savedCamera = {
+    yaw: state.camera.yaw,
+    pitch: state.camera.pitch,
+    distance: state.camera.distance,
+    target: [...state.camera.target]
+  };
+  ui.reticle.classList.remove("is-visible");
+  ui.stage.classList.add("is-roaming");
+  ui.studioModeButton.classList.remove("is-active");
+  ui.gameModeButton.classList.remove("is-active");
+  ui.roamToggle.classList.add("is-active");
+  setButtonTrailingText(ui.roamToggle, t("exitRoam"));
+  setGestureFeedback(t("roamOnTitle"), t("roamOnDetail"), "hand");
+}
+
+function bakeFreeViewIntoCamera() {
+  if (Math.abs(state.freeView.yaw) < 0.0001 && Math.abs(state.freeView.pitch) < 0.0001) return;
+  state.camera.yaw -= state.freeView.yaw;
+  state.camera.pitch = clamp(state.camera.pitch - state.freeView.pitch, -1.2, 1.2);
+  state.freeView.yaw = 0;
+  state.freeView.pitch = 0;
+}
+
+function exitRoamMode() {
+  state.roam.active = false;
+  state.roam.lookActive = false;
+  state.roam.lastMoveAt = 0;
+  ui.stage.classList.remove("is-roaming");
+  ui.roamToggle.classList.remove("is-active");
+  if (state.mode !== "game") ui.studioModeButton.classList.add("is-active");
+  setButtonTrailingText(ui.roamToggle, t("roam"));
+  setGestureFeedback(t("roamOffTitle"), t("roamOffDetail"), "");
 }
 
 function stopRecording() {
@@ -1920,7 +2347,7 @@ function finalizeRecording() {
   state.recording.url = url;
 
   ui.recordPill.textContent = t("recorded");
-  ui.recordToggle.querySelector("span:last-child").textContent = t("again");
+  setButtonTrailingText(ui.recordToggle, t("again"));
   ui.recordToggle.classList.remove("is-recording");
   ui.recordDownload.disabled = false;
   ui.recordShare.disabled = !canShareRecording(blob);
@@ -2002,10 +2429,21 @@ function updateSceneThumbnail() {
 }
 
 async function setupHandLandmarker() {
-  if (state.gesture.landmarker || state.gesture.loading) return;
+  if (state.gesture.recognizer || state.gesture.landmarker || state.gesture.loading) return;
   state.gesture.loading = true;
-  const { FilesetResolver, HandLandmarker, FaceLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs");
+  const { FilesetResolver, GestureRecognizer, HandLandmarker, FaceLandmarker } = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs");
   const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+  const gestureOptions = delegate => ({
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task",
+      delegate
+    },
+    runningMode: "VIDEO",
+    numHands: 2,
+    minHandDetectionConfidence: 0.45,
+    minHandPresenceConfidence: 0.45,
+    minTrackingConfidence: 0.45
+  });
   const handOptions = delegate => ({
     baseOptions: {
       modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
@@ -2029,9 +2467,17 @@ async function setupHandLandmarker() {
     minTrackingConfidence: 0.5
   });
   try {
-    state.gesture.landmarker = await HandLandmarker.createFromOptions(vision, handOptions("GPU"));
+    state.gesture.recognizer = await GestureRecognizer.createFromOptions(vision, gestureOptions("GPU"));
   } catch (error) {
-    state.gesture.landmarker = await HandLandmarker.createFromOptions(vision, handOptions("CPU"));
+    try {
+      state.gesture.recognizer = await GestureRecognizer.createFromOptions(vision, gestureOptions("CPU"));
+    } catch {
+      try {
+        state.gesture.landmarker = await HandLandmarker.createFromOptions(vision, handOptions("GPU"));
+      } catch {
+        state.gesture.landmarker = await HandLandmarker.createFromOptions(vision, handOptions("CPU"));
+      }
+    }
   }
   try {
     state.gesture.faceLandmarker = await FaceLandmarker.createFromOptions(vision, faceOptions("GPU"));
@@ -2057,7 +2503,9 @@ function trackHands() {
         const faceResults = state.gesture.faceLandmarker.detectForVideo(ui.cameraPreview, timestamp);
         updateFaceFromResults(faceResults);
       }
-      const results = state.gesture.landmarker.detectForVideo(ui.cameraPreview, timestamp);
+      const results = state.gesture.recognizer
+        ? state.gesture.recognizer.recognizeForVideo(ui.cameraPreview, timestamp)
+        : state.gesture.landmarker.detectForVideo(ui.cameraPreview, timestamp);
       handleHandResults(results);
     } catch (error) {
       ui.handStatus.textContent = t("trackingError");
@@ -2071,6 +2519,8 @@ function trackHands() {
 
 function handleHandResults(results) {
   const hands = getHandLandmarks(results);
+  state.handedness = getPrimaryHandedness(results);
+  state.recognizedGesture = getPrimaryGesture(results);
   const hand = hands[0] || null;
   drawHandOverlay(hands);
 
@@ -2111,7 +2561,20 @@ function handleHandResults(results) {
   ui.pinchMeter.style.width = `${Math.round(pinchAmount * 100)}%`;
   ui.gestureHud.classList.toggle("is-active", state.gesture.active);
 
+  if (handleModeSwitchGesture(hand)) {
+    return;
+  }
+
+  if (handleViewResetGesture()) {
+    return;
+  }
+
   const fistDetected = isFist(hand);
+  if (state.roam.active) {
+    handleRoamGesture({ hands, hand, midpoint, pinchRatio, fistDetected });
+    return;
+  }
+
   if (!state.gesture.active && fistDetected) {
     handleFistHammer(hand);
     return;
@@ -2141,6 +2604,193 @@ function handleHandResults(results) {
 function getHandLandmarks(results) {
   const landmarks = results.landmarks || results.handLandmarks || [];
   return landmarks;
+}
+
+function getPrimaryHandedness(results) {
+  const item = (results.handednesses || results.handedness || [])[0];
+  const category = Array.isArray(item) ? item[0] : item;
+  return category?.categoryName || category?.displayName || "";
+}
+
+function getPrimaryGesture(results) {
+  const item = (results.gestures || [])[0];
+  const category = Array.isArray(item) ? item[0] : item;
+  return category?.categoryName || "";
+}
+
+function handleModeSwitchGesture(hand) {
+  const now = performance.now();
+  const ok = isOkGesture(hand);
+  if (!ok) {
+    state.modeSwitch.okStartedAt = 0;
+    state.modeSwitch.target = "";
+    return false;
+  }
+
+  if (now < state.modeSwitch.cooldownUntil) {
+    return true;
+  }
+
+  if (state.gesture.active) endGesture();
+  resetTransformGestures();
+
+  if (!state.modeSwitch.okStartedAt) {
+    state.modeSwitch.okStartedAt = now;
+    state.modeSwitch.target = state.roam.active ? "free" : "walk";
+  }
+
+  const progress = clamp((now - state.modeSwitch.okStartedAt) / 1000, 0, 1);
+  const percent = Math.round(progress * 100);
+  const goingToWalk = state.modeSwitch.target === "walk";
+  ui.gestureHud.classList.add("is-active");
+  ui.handStatus.textContent = t("okGesture");
+  ui.pinchStatus.textContent = goingToWalk ? t("switchingToWalk") : t("switchingToFree");
+  ui.pinchMeter.style.width = `${percent}%`;
+  setGestureFeedback(t("modeSwitchHold"), t("modeSwitchDetail", percent), "pinch");
+
+  if (progress >= 1) {
+    if (goingToWalk) {
+      enterRoamMode();
+    } else {
+      exitRoamMode();
+    }
+    state.modeSwitch.okStartedAt = 0;
+    state.modeSwitch.target = "";
+    state.modeSwitch.cooldownUntil = now + 1800;
+    ui.pinchMeter.style.width = "0%";
+  }
+
+  return true;
+}
+
+function handleViewResetGesture() {
+  const now = performance.now();
+  if (state.recognizedGesture !== "Thumb_Up") {
+    state.viewReset.startedAt = 0;
+    return false;
+  }
+
+  if (now < state.viewReset.cooldownUntil) {
+    return true;
+  }
+
+  if (!state.viewReset.startedAt) {
+    state.viewReset.startedAt = now;
+  }
+
+  const progress = clamp((now - state.viewReset.startedAt) / 800, 0, 1);
+  const percent = Math.round(progress * 100);
+  ui.gestureHud.classList.add("is-active");
+  ui.handStatus.textContent = t("resetView");
+  ui.pinchStatus.textContent = t("resetViewHold");
+  ui.pinchMeter.style.width = `${percent}%`;
+  setGestureFeedback(t("resetViewHold"), t("resetViewDetail", percent), "hand");
+
+  if (progress >= 1) {
+    resetView();
+    state.viewReset.startedAt = 0;
+    state.viewReset.cooldownUntil = now + 1600;
+    ui.pinchMeter.style.width = "0%";
+    setGestureFeedback(t("resetViewDone"), t("studioReady"), "hand");
+  }
+
+  return true;
+}
+
+function resetView() {
+  state.camera.yaw = -0.48;
+  state.camera.pitch = 0.32;
+  state.camera.distance = 4.2;
+  state.camera.target = [0, 0, 0];
+  state.freeView.yaw = 0;
+  state.freeView.pitch = 0;
+  resetTransformGestures();
+  ui.reticle.classList.remove("is-visible");
+  ui.interactionState.textContent = t("resetViewDone");
+}
+
+function isOkGesture(hand) {
+  if (!hand || !hand[0] || !hand[4] || !hand[5] || !hand[8] || !hand[10] || !hand[12] || !hand[14] || !hand[16] || !hand[18] || !hand[20]) {
+    return false;
+  }
+  const palmSize = Math.max(landmarkDistance(hand[0], hand[5]), 0.04);
+  const thumbIndex = landmarkDistance(hand[4], hand[8]) / palmSize;
+  const extended = [12, 16, 20].filter(tipIndex => {
+    const pipIndex = tipIndex - 2;
+    return landmarkDistance(hand[tipIndex], hand[0]) > landmarkDistance(hand[pipIndex], hand[0]) * 1.08;
+  }).length;
+  const spread = Math.max(landmarkDistance(hand[12], hand[16]), landmarkDistance(hand[16], hand[20])) / palmSize;
+  return thumbIndex < 0.48 && extended >= 2 && spread > 0.28;
+}
+
+function handleRoamGesture({ hands, hand, midpoint, pinchRatio, fistDetected }) {
+  endGesture();
+  ui.reticle.classList.remove("is-visible");
+  ui.gestureHud.classList.add("is-active");
+
+  if (pinchRatio < 0.62) {
+    handleRoamLook(midpoint);
+    return;
+  }
+  state.roam.lookActive = false;
+
+  const palm = palmCenter(hand);
+  if (!palm) return;
+  const now = performance.now();
+  const dt = Math.min(48, Math.max(12, now - (state.roam.lastMoveAt || now)));
+  state.roam.lastMoveAt = now;
+
+  const moveX = 0;
+  const moveZ = walkGestureMoveZ(hands);
+  const speed = 0.0026 * dt;
+  const yaw = state.camera.yaw;
+  const forwardVec = [-Math.sin(yaw), 0, -Math.cos(yaw)];
+  const rightVec = [Math.cos(yaw), 0, -Math.sin(yaw)];
+  state.camera.target[0] += (forwardVec[0] * moveZ + rightVec[0] * moveX) * speed;
+  state.camera.target[2] += (forwardVec[2] * moveZ + rightVec[2] * moveX) * speed;
+
+  const moving = Math.abs(moveX) + Math.abs(moveZ) > 0;
+  const direction = roamDirectionLabel(moveX, moveZ);
+  ui.pinchStatus.textContent = moving ? direction : `${t("roamIdle")} · ${state.recognizedGesture || "None"}`;
+  setGestureFeedback(moving ? direction : t("roamMoving"), moving ? t("roamMovingDetail") : t("roamOnDetail"), "hand");
+}
+
+function roamDirectionLabel(moveX, moveZ) {
+  return moveZ >= 0 ? t("roamForward") : t("roamBackward");
+}
+
+function walkGestureMoveZ(hands) {
+  if (hands.length >= 2) return -1;
+  if (state.recognizedGesture === "Open_Palm") return 1;
+  return 0;
+}
+
+function handleRoamLook(midpoint) {
+  const point = cameraLandmarkToCanvas(midpoint);
+  if (!state.roam.lookActive) {
+    state.roam.lookActive = true;
+    state.roam.lastLookX = point.x;
+    state.roam.lastLookY = point.y;
+    ui.pinchStatus.textContent = t("roamLooking");
+    setGestureFeedback(t("roamLooking"), t("roamHint"), "pinch");
+    return;
+  }
+
+  const dx = point.x - state.roam.lastLookX;
+  const dy = point.y - state.roam.lastLookY;
+  state.roam.lastLookX = point.x;
+  state.roam.lastLookY = point.y;
+  state.camera.yaw += dx * 0.0065;
+  state.camera.pitch = clamp(state.camera.pitch + dy * 0.0045, -1.2, 1.2);
+  ui.pinchStatus.textContent = t("roamLooking");
+}
+
+function twoHandRoamBoost(hands) {
+  const a = palmCenter(hands[0]);
+  const b = palmCenter(hands[1]);
+  if (!a || !b) return 1;
+  const distance = Math.hypot(a.x - b.x, a.y - b.y);
+  return distance > 0.42 ? 2.15 : 1;
 }
 
 function isFist(hand) {
@@ -2201,8 +2851,8 @@ function handleOpenPalmRotate(hand) {
   const dy = palm.y - state.gesture.lastPalmY;
   state.gesture.lastPalmX = palm.x;
   state.gesture.lastPalmY = palm.y;
-  state.camera.yaw += dx * 3.4;
-  state.camera.pitch = clamp(state.camera.pitch + dy * 2.2, -1.15, 1.15);
+  state.freeView.yaw -= dx * 3.2;
+  state.freeView.pitch = clamp(state.freeView.pitch - dy * 2.0, -0.85, 0.85);
   ui.pinchStatus.textContent = t("rotating");
   ui.interactionState.textContent = t("rotatingState");
   setGestureFeedback(t("rotating"), t("rotatingDetail"), "hand");
@@ -2239,8 +2889,15 @@ function handleFistHammer(hand) {
     state.gesture.fistActive = true;
     state.gesture.lastFistX = palm.x;
     state.gesture.lastFistY = palm.y;
-    ui.pinchStatus.textContent = t("fistReady");
-    setGestureFeedback(t("fistReadyTitle"), t("fistReadyDetail"), "hand");
+    if (now - state.gesture.lastHammerAt > 420) {
+      state.gesture.lastHammerAt = now;
+      const point = cameraLandmarkToCanvas(palm);
+      setGestureWorldPoint(point.x, point.y);
+      applyHammerSmash(0, 0.05);
+    } else {
+      ui.pinchStatus.textContent = t("fistReady");
+      setGestureFeedback(t("fistReadyTitle"), t("fistReadyDetail"), "hand");
+    }
     return;
   }
 
@@ -2249,7 +2906,7 @@ function handleFistHammer(hand) {
   state.gesture.lastFistX = palm.x;
   state.gesture.lastFistY = palm.y;
 
-  if (dy > 0.035 && now - state.gesture.lastHammerAt > 650) {
+  if (dy > 0.024 && now - state.gesture.lastHammerAt > 360) {
     state.gesture.lastHammerAt = now;
     const point = cameraLandmarkToCanvas(palm);
     setGestureWorldPoint(point.x, point.y);
@@ -2284,6 +2941,7 @@ function applyHammerSmash(dx, dy) {
   ui.pinchStatus.textContent = t("hammer");
   ui.interactionState.textContent = t("hammerState", selected);
   setGestureFeedback(t("hammerSmash"), t("hammerDetail", selected), "pinch");
+  triggerImpactFx("SMASH");
   showScoreFx("SMASH", "up");
   updateCompetitionFromEdit({ selected, center, dx: dx * 400, dy: dy * 520, freshSelection: true, action: "hammer" });
 }
@@ -2669,7 +3327,30 @@ function computeViewProjection() {
   const aspect = canvas.width / Math.max(1, canvas.height);
   const proj = perspective(Math.PI / 4, aspect, 0.01, 100);
   const view = lookAt(eye, c.target, [0, 1, 0]);
-  return multiplyMat4(proj, view);
+  const viewProj = multiplyMat4(proj, view);
+  return state.roam.active ? viewProj : multiplyMat4(viewProj, freeViewMatrix());
+}
+
+function freeViewMatrix() {
+  const yaw = state.freeView.yaw;
+  const pitch = state.freeView.pitch;
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cx = Math.cos(pitch);
+  const sx = Math.sin(pitch);
+  const yawMatrix = new Float32Array([
+    cy, 0, -sy, 0,
+    0, 1, 0, 0,
+    sy, 0, cy, 0,
+    0, 0, 0, 1
+  ]);
+  const pitchMatrix = new Float32Array([
+    1, 0, 0, 0,
+    0, cx, sx, 0,
+    0, -sx, cx, 0,
+    0, 0, 0, 1
+  ]);
+  return multiplyMat4(yawMatrix, pitchMatrix);
 }
 
 function screenToWorldOnPlane(ndcX, ndcY) {
