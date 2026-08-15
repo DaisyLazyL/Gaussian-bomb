@@ -47,6 +47,8 @@ const ui = {
   recordShare: document.querySelector("#recordShare"),
   recordPreview: document.querySelector("#recordPreview"),
   recordMeta: document.querySelector("#recordMeta"),
+  stageModeLabel: document.querySelector("#stageModeLabel"),
+  stageModeHint: document.querySelector("#stageModeHint"),
   competitionPill: document.querySelector("#competitionPill"),
   playerName: document.querySelector("#playerName"),
   competitionTimer: document.querySelector("#competitionTimer"),
@@ -90,7 +92,7 @@ const BUILT_IN_SCENES = {
   "japanese-garden": { name: "Japanese Garden", zhName: "日式园林", file: "/scenes/japanese-garden.ply" }
 };
 const state = {
-  lang: localStorage.getItem("pinchgs-lang") || "en",
+  lang: localStorage.getItem("pinchgs-lang") || "zh",
   mode: "studio",
   roomId: "",
   roomSceneLoaded: false,
@@ -197,8 +199,12 @@ const translations = {
   en: {
     brandSubtitle: "Gesture editing for 3D Gaussian scenes",
     language: "Language",
-    studio: "Free",
-    gameMode: "Challenge",
+    studio: "Solo mode",
+    gameMode: "Creative battle",
+    freeMode: "Free mode",
+    walkMode: "Walk mode",
+    tabSwitchWalk: "Tab to walk",
+    tabSwitchFree: "Tab to free",
     importTitle: "Import 3DGS",
     chooseScene: "Choose or drop a scene",
     importHint: "PLY and SPLAT preview now. KSPLAT hook is reserved.",
@@ -419,10 +425,20 @@ const translations = {
     stepTwoHandsBody: "Move hands apart or together to zoom.",
     skip: "Skip",
     rulesTitle: "Game mode rules",
+    rulesKicker: "Challenge setup",
     rulesHeroTitle: "Invite friends to tear apart one shared Gaussian scene.",
     rulesHeroBody: "Everyone plays on their own computer. Best score wins.",
+    flowPickScene: "Pick scene",
+    flowShareRoom: "Share room",
+    flowSmashRank: "Smash & rank",
+    ruleFactTries: "tries each",
+    ruleFactTime: "per try",
+    ruleFactBest: "best score ranks",
     yourNickname: "Your nickname",
     enterNickname: "Enter nickname first",
+    sceneSourceBuiltIn: "Built-in scenes",
+    sceneSourceBuiltInHint: "Fastest way to start a room.",
+    sceneSourceUploadHint: "Use your own .ply / .splat / .ksplat file.",
     hostUploadTitle: "Host uploads a scene",
     hostUploadBody: "The shared room keeps one 3DGS scene for all invited players.",
     shareInviteTitle: "Share the invite link",
@@ -431,8 +447,8 @@ const translations = {
     triesRuleBody: "Each try lasts 15 seconds. Only the highest score is ranked.",
     creativityRuleTitle: "Creativity score",
     creativityRuleBody: "Coverage, rhythm, variety, and spatial play all matter.",
-    gotItImport: "Got it and import scene",
-    gotIt: "Got it",
+    gotItImport: "Create room and upload scene",
+    gotIt: "Enter challenge",
     tryResult: "Try result",
     firstTryComplete: "First try complete",
     nextTry: "Next try",
@@ -454,8 +470,12 @@ const translations = {
   zh: {
     brandSubtitle: "用手势编辑 3D Gaussian 场景",
     language: "语言",
-    studio: "自由",
-    gameMode: "挑战",
+    studio: "单人模式",
+    gameMode: "创意对战",
+    freeMode: "自由模式",
+    walkMode: "行走模式",
+    tabSwitchWalk: "Tab 切换行走",
+    tabSwitchFree: "Tab 切回自由",
     importTitle: "导入 3DGS",
     chooseScene: "选择或拖入场景",
     importHint: "当前支持 PLY 和 SPLAT 预览，KSPLAT 入口已预留。",
@@ -676,10 +696,20 @@ const translations = {
     stepTwoHandsBody: "双手分开或靠近来缩放场景。",
     skip: "跳过",
     rulesTitle: "游戏模式规则",
+    rulesKicker: "挑战启动",
     rulesHeroTitle: "邀请朋友一起撕碎同一个 Gaussian 场景。",
     rulesHeroBody: "每个人用自己的电脑挑战，最后按最高分排名。",
+    flowPickScene: "选场景",
+    flowShareRoom: "发邀请",
+    flowSmashRank: "捏碎排名",
+    ruleFactTries: "每人机会",
+    ruleFactTime: "每次挑战",
+    ruleFactBest: "最高分排名",
     yourNickname: "你的昵称",
     enterNickname: "先输入昵称",
+    sceneSourceBuiltIn: "内置场景",
+    sceneSourceBuiltInHint: "最快创建房间，适合现场开局。",
+    sceneSourceUploadHint: "使用你自己的 .ply / .splat / .ksplat 文件。",
     hostUploadTitle: "房主上传场景",
     hostUploadBody: "房间会保存一个共享 3DGS 场景，所有玩家挑战同一个场景。",
     shareInviteTitle: "分享邀请链接",
@@ -688,8 +718,8 @@ const translations = {
     triesRuleBody: "每次挑战 15 秒，只取最高分进入排名。",
     creativityRuleTitle: "创意评分",
     creativityRuleBody: "覆盖范围、节奏、动作多样性和空间表现都会影响分数。",
-    gotItImport: "知道了，去导入场景",
-    gotIt: "知道了",
+    gotItImport: "创建房间并上传场景",
+    gotIt: "进入挑战",
     tryResult: "本次结果",
     firstTryComplete: "第一次挑战完成",
     nextTry: "下一次挑战",
@@ -772,10 +802,13 @@ function characterAccent() {
 
 function applyLanguage() {
   document.documentElement.lang = state.lang === "zh" ? "zh-CN" : "en";
+  document.title = "Gaussian Smash";
+  const brandTitle = document.querySelector(".brand h1");
+  if (brandTitle) brandTitle.textContent = "Gaussian Smash";
   setText(".brand p", "brandSubtitle");
   setText(".language-switch span", "language");
   ui.studioModeButton.textContent = t("studio");
-  ui.gameModeButton.innerHTML = `<span>${t("gameMode")}</span><small>${t("tries")}</small>`;
+  ui.gameModeButton.innerHTML = `<span>${t("gameMode")}</span>`;
   ui.dropZone.title = t("chooseScene");
   if (!state.original || ui.fileMeta.textContent.includes("Demo") || ui.fileMeta.textContent.includes("Demo")) {
     ui.fileMeta.textContent = t("demoLoaded");
@@ -791,7 +824,7 @@ function applyLanguage() {
   });
   setText("#editToolPanel .range-row:nth-of-type(1) span", "brushRadius");
   setText("#editToolPanel .range-row:nth-of-type(2) span", "strength");
-  setText(".rail section:nth-of-type(2) .panel-title span:first-child", "gestureInput");
+  setText("#gesturePanel .panel-title span:first-child", "gestureInput");
   ui.gesturePill.textContent = state.gesture.cameraOn ? t("camera") : t("simulator");
   ui.cameraEmpty.textContent = t("cameraOff");
   ui.cameraToggle.textContent = state.gesture.cameraOn ? t("cameraOn") : t("startCamera");
@@ -801,26 +834,35 @@ function applyLanguage() {
   setOptionText("none", t("none"));
   if (ui.characterLabel) ui.characterLabel.textContent = t("character");
   if (ui.characterSelect) ui.characterSelect.value = state.mask;
-  setText(".rail section:nth-of-type(2) .hint-line", "gestureHint");
+  setText("#gesturePanel .hint-line", "gestureHint");
   setText("#gamePanel .panel-title span:first-child", "gameChallenge");
   ui.competitionPill.textContent = state.competition.triesLeft > 0 ? triesText(state.competition.triesLeft) : t("done");
   setText("#gameHint", "gameHint");
   setText("#sceneLibraryLabel", "sceneLibrary");
   document.querySelectorAll(".scene-preset-button").forEach(button => {
     const scene = BUILT_IN_SCENES[button.dataset.scene];
-    if (scene) button.textContent = state.lang === "zh" ? scene.zhName : scene.name;
+    if (scene) {
+      const label = state.lang === "zh" ? scene.zhName : scene.name;
+      const cardTitle = button.querySelector("strong");
+      if (cardTitle) {
+        cardTitle.textContent = label;
+      } else {
+        button.textContent = label;
+      }
+    }
   });
   setText("#playerNameLabel", "nickname");
   setPlaceholder("#playerName", "yourName");
   setText(".competition-scoreboard div:first-child small", "seconds");
   setText(".competition-scoreboard div:last-child small", "creativity");
-  setText(".rail section:nth-of-type(3) .panel-title span", "recordDemo");
+  setText("#recordPanel .panel-title span", "recordDemo");
   ui.recordDownload.textContent = t("download");
   ui.recordShare.textContent = t("share");
   if (!state.recording.blob && !state.recording.active) ui.recordMeta.textContent = t("recordMetaReady");
   setText(".metrics div:nth-child(1) small", "gaussians");
   setText(".metrics div:nth-child(2) small", "selected");
   if (!state.gesture.cameraOn && !state.competition.active) ui.interactionState.textContent = state.mode === "game" ? t("gameReady") : t("studioReady");
+  updateStageModePill();
   setButtonTrailingText(ui.recordToggle, state.recording.active ? t("stop") : state.recording.blob ? t("again") : t("record"));
   ui.recordToggle.title = t("recordCanvas");
   ui.recordPill.textContent = state.recording.active ? t("recording") : state.recording.blob ? t("recorded") : t("ready");
@@ -856,12 +898,22 @@ function applyLanguage() {
   ui.onboardingStart.textContent = t("startCamera");
   ui.onboardingSkip.textContent = t("skip");
   setText("#gameRulesModal .panel-title span", "rulesTitle");
+  setText("#rulesKicker", "rulesKicker");
   setText(".game-rules-hero strong", "rulesHeroTitle");
-  setText(".game-rules-hero span", "rulesHeroBody");
+  setText(".game-rules-hero .rules-hero-body", "rulesHeroBody");
+  setText("#flowPickScene", "flowPickScene");
+  setText("#flowShareRoom", "flowShareRoom");
+  setText("#flowSmashRank", "flowSmashRank");
+  setText("#ruleFactTries", "ruleFactTries");
+  setText("#ruleFactTime", "ruleFactTime");
+  setText("#ruleFactBest", "ruleFactBest");
   setText("#gameRulesModal .field-row span", "yourNickname");
   setPlaceholder("#modalPlayerName", "enterNickname");
   setText("#modalSceneLibraryLabel", "scenePickerTitle");
   setText("#modalSceneLibraryHint", "scenePickerHint");
+  setText("#sceneSourceBuiltIn", "sceneSourceBuiltIn");
+  setText("#sceneSourceBuiltInHint", "sceneSourceBuiltInHint");
+  setText("#sceneSourceUploadHint", "sceneSourceUploadHint");
   if (ui.modalUploadScene) ui.modalUploadScene.textContent = t("uploadOwnScene");
   const ruleSteps = [
     ["hostUploadTitle", "hostUploadBody"],
@@ -878,6 +930,12 @@ function applyLanguage() {
   if (!state.competition.score) ui.resultDelta.textContent = t("firstTryComplete");
   if (ui.resultTitle && !state.competition.score) ui.resultTitle.textContent = t("titleChaos");
   setText("#resultNextTry", "nextTry");
+}
+
+function updateStageModePill() {
+  if (!ui.stageModeLabel || !ui.stageModeHint) return;
+  ui.stageModeLabel.textContent = state.roam.active ? t("walkMode") : t("freeMode");
+  ui.stageModeHint.textContent = state.roam.active ? t("tabSwitchFree") : t("tabSwitchWalk");
 }
 
 if (!gl) {
@@ -2331,6 +2389,7 @@ function enterRoamMode() {
   ui.gameModeButton.classList.remove("is-active");
   ui.roamToggle.classList.add("is-active");
   setButtonTrailingText(ui.roamToggle, t("exitRoam"));
+  updateStageModePill();
   setGestureFeedback(t("roamOnTitle"), t("roamOnDetail"), "hand");
 }
 
@@ -2350,6 +2409,7 @@ function exitRoamMode() {
   ui.roamToggle.classList.remove("is-active");
   if (state.mode !== "game") ui.studioModeButton.classList.add("is-active");
   setButtonTrailingText(ui.roamToggle, t("roam"));
+  updateStageModePill();
   setGestureFeedback(t("roamOffTitle"), t("roamOffDetail"), "");
 }
 
