@@ -263,6 +263,56 @@ select {
   opacity: 0.58;
 }
 
+.modal-scene-picker {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(98, 211, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(98, 211, 255, 0.055);
+}
+
+.scene-picker-title {
+  display: grid;
+  gap: 4px;
+}
+
+.scene-picker-title span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.scene-picker-title small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.modal-scene-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.modal-scene-button {
+  min-height: 44px;
+  text-align: center;
+}
+
+.modal-upload-button {
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: var(--text);
+  font-weight: 900;
+}
+
+.modal-upload-button input {
+  display: none;
+}
+
 .tool-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1448,5 +1498,9 @@ input[type="range"] {
 
   .interaction-state {
     max-width: 100%;
+  }
+
+  .modal-scene-grid {
+    grid-template-columns: 1fr;
   }
 }

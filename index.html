@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>PinchGS</title>
-    <link rel="stylesheet" href="./src/styles.css?v=scene-library-wasd-legend" />
+    <link rel="stylesheet" href="./src/styles.css?v=challenge-scene-modal" />
   </head>
   <body>
     <main class="app-shell">
@@ -217,6 +217,21 @@
               <span>Your nickname</span>
               <input id="modalPlayerName" type="text" maxlength="18" placeholder="Enter nickname first" />
             </label>
+            <div class="modal-scene-picker">
+              <div class="scene-picker-title">
+                <span id="modalSceneLibraryLabel">Choose challenge scene</span>
+                <small id="modalSceneLibraryHint">Pick a built-in scene or upload your own 3DGS file.</small>
+              </div>
+              <div class="modal-scene-grid">
+                <button class="scene-preset-button modal-scene-button" data-scene="shanghai-office">Shanghai Office</button>
+                <button class="scene-preset-button modal-scene-button" data-scene="gaussians">Gaussians</button>
+                <button class="scene-preset-button modal-scene-button" data-scene="japanese-garden">Japanese Garden</button>
+              </div>
+              <label class="secondary-button btn-full modal-upload-button">
+                <input id="modalSceneInput" type="file" accept=".ply,.splat,.ksplat" />
+                <span id="modalUploadScene">Upload my scene</span>
+              </label>
+            </div>
             <ol class="onboarding-steps">
               <li><strong>Host uploads a scene</strong><span>The shared room keeps one 3DGS scene for all invited players.</span></li>
               <li><strong>Share the invite link</strong><span>Friends open the link and enter Game mode directly.</span></li>
@@ -313,6 +328,6 @@
       </aside>
     </main>
 
-    <script type="module" src="./src/app.js?v=scene-library-wasd-legend"></script>
+    <script type="module" src="./src/app.js?v=challenge-scene-modal"></script>
   </body>
 </html>

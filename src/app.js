@@ -63,6 +63,8 @@ const ui = {
   gameRulesClose: document.querySelector("#gameRulesClose"),
   gameRulesGotIt: document.querySelector("#gameRulesGotIt"),
   modalPlayerName: document.querySelector("#modalPlayerName"),
+  modalSceneInput: document.querySelector("#modalSceneInput"),
+  modalUploadScene: document.querySelector("#modalUploadScene"),
   tryResultModal: document.querySelector("#tryResultModal"),
   tryResultClose: document.querySelector("#tryResultClose"),
   resultScore: document.querySelector("#resultScore"),
@@ -203,6 +205,9 @@ const translations = {
     demoLoaded: "Demo Gaussian cloud is loaded.",
     roomEmpty: "Create a game room, then upload the shared scene.",
     sceneLibrary: "Built-in scenes",
+    scenePickerTitle: "Choose challenge scene",
+    scenePickerHint: "Pick a built-in scene or upload your own 3DGS file.",
+    uploadOwnScene: "Upload my scene",
     sceneLoading: name => `Loading ${name}...`,
     sceneLoaded: name => `${name} loaded for this challenge.`,
     copyInvite: "Copy invite link",
@@ -457,6 +462,9 @@ const translations = {
     demoLoaded: "已加载 Demo 高斯点云。",
     roomEmpty: "创建游戏房间后，先上传大家一起挑战的场景。",
     sceneLibrary: "内置场景",
+    scenePickerTitle: "选择挑战场景",
+    scenePickerHint: "选择一个内置场景，或上传你自己的 3DGS 文件。",
+    uploadOwnScene: "上传我的场景",
     sceneLoading: name => `正在加载 ${name}...`,
     sceneLoaded: name => `${name} 已作为本次挑战场景。`,
     copyInvite: "复制邀请链接",
@@ -852,6 +860,9 @@ function applyLanguage() {
   setText(".game-rules-hero span", "rulesHeroBody");
   setText("#gameRulesModal .field-row span", "yourNickname");
   setPlaceholder("#modalPlayerName", "enterNickname");
+  setText("#modalSceneLibraryLabel", "scenePickerTitle");
+  setText("#modalSceneLibraryHint", "scenePickerHint");
+  if (ui.modalUploadScene) ui.modalUploadScene.textContent = t("uploadOwnScene");
   const ruleSteps = [
     ["hostUploadTitle", "hostUploadBody"],
     ["shareInviteTitle", "shareInviteBody"],
@@ -959,6 +970,10 @@ function bindUi() {
   ui.copyRoomLink.addEventListener("click", copyInviteLink);
 
   ui.fileInput.addEventListener("change", event => {
+    const file = event.target.files && event.target.files[0];
+    if (file) loadFile(file);
+  });
+  ui.modalSceneInput?.addEventListener("change", event => {
     const file = event.target.files && event.target.files[0];
     if (file) loadFile(file);
   });
@@ -1256,9 +1271,15 @@ async function loadFile(file) {
     if (state.mode === "game" && state.roomId) {
       await uploadRoomScene(file.name, buffer);
     }
+    if (state.mode === "game" && ui.gameRulesModal.classList.contains("is-visible")) {
+      hideGameRules();
+    }
   } catch (error) {
     ui.interactionState.textContent = error.message;
     ui.fileMeta.textContent = t("importFailed", error.message);
+  } finally {
+    ui.fileInput.value = "";
+    if (ui.modalSceneInput) ui.modalSceneInput.value = "";
   }
 }
 
@@ -1285,6 +1306,9 @@ async function loadBuiltInScene(sceneId) {
       await uploadRoomScene(filename, buffer);
     }
     ui.interactionState.textContent = t("sceneLoaded", label);
+    if (state.mode === "game" && ui.gameRulesModal.classList.contains("is-visible")) {
+      hideGameRules();
+    }
   } catch (error) {
     ui.interactionState.textContent = t("importFailed", error.message);
   } finally {
