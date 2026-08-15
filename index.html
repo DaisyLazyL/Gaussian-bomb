@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gaussian Smash</title>
-    <link rel="stylesheet" href="./src/styles.css?v=gaussian-smash-name" />
+    <link rel="stylesheet" href="./src/styles.css?v=game-modal-steps" />
   </head>
   <body>
     <main class="app-shell">
@@ -44,7 +44,7 @@
         <section class="panel scene-panel">
           <div class="panel-title">
             <span id="sceneLibraryLabel">Built-in scenes</span>
-            <span class="scene-count">3</span>
+            <span class="scene-count">4</span>
           </div>
           <div class="scene-card-grid">
             <button class="scene-card scene-preset-button" data-scene="shanghai-office">
@@ -58,6 +58,10 @@
             <button class="scene-card scene-preset-button" data-scene="japanese-garden">
               <span class="scene-card-art">庭</span>
               <strong>Japanese Garden</strong>
+            </button>
+            <button class="scene-card scene-preset-button" data-scene="matrix-campus">
+              <span class="scene-card-art">矩</span>
+              <strong>Matrix Campus</strong>
             </button>
           </div>
         </section>
@@ -242,26 +246,34 @@
               <span>Game mode rules</span>
               <button class="icon-button" id="gameRulesClose" aria-label="Close game rules">×</button>
             </div>
-            <div class="game-rules-hero">
-              <span class="rules-kicker" id="rulesKicker">Challenge setup</span>
-              <strong>Invite friends to tear apart one shared Gaussian scene.</strong>
-              <span class="rules-hero-body">Everyone plays on their own computer. Best score wins.</span>
+            <div class="rules-stepper" aria-label="Game setup steps">
+              <span class="is-active" data-rules-step-dot="1"><b>1</b><small id="rulesStepRules">Rules</small></span>
+              <span data-rules-step-dot="2"><b>2</b><small id="rulesStepScene">Scene</small></span>
+              <span data-rules-step-dot="3"><b>3</b><small id="rulesStepName">Name</small></span>
             </div>
-            <div class="challenge-flow" aria-label="Challenge flow">
-              <span><b>1</b><small id="flowPickScene">Pick scene</small></span>
-              <span><b>2</b><small id="flowShareRoom">Share room</small></span>
-              <span><b>3</b><small id="flowSmashRank">Smash & rank</small></span>
+            <div class="game-rules-step is-active" data-rules-step="1">
+              <div class="game-rules-hero">
+                <span class="rules-kicker" id="rulesKicker">Challenge setup</span>
+                <strong>Invite friends to tear apart one shared Gaussian scene.</strong>
+                <span class="rules-hero-body">Everyone plays on their own computer. Best score wins.</span>
+              </div>
+              <div class="challenge-flow" aria-label="Challenge flow">
+                <span><b>1</b><small id="flowPickScene">Pick scene</small></span>
+                <span><b>2</b><small id="flowShareRoom">Share room</small></span>
+                <span><b>3</b><small id="flowSmashRank">Smash & rank</small></span>
+              </div>
+              <div class="rules-fast-facts">
+                <div><strong>3</strong><span id="ruleFactTries">tries each</span></div>
+                <div><strong>15s</strong><span id="ruleFactTime">per try</span></div>
+                <div><strong>Best</strong><span id="ruleFactBest">score ranks</span></div>
+              </div>
             </div>
-            <div class="rules-fast-facts">
-              <div><strong>3</strong><span id="ruleFactTries">tries each</span></div>
-              <div><strong>15s</strong><span id="ruleFactTime">per try</span></div>
-              <div><strong>Best</strong><span id="ruleFactBest">score ranks</span></div>
-            </div>
-            <label class="field-row">
-              <span>Your nickname</span>
-              <input id="modalPlayerName" type="text" maxlength="18" placeholder="Enter nickname first" />
-            </label>
-            <div class="modal-scene-picker">
+            <div class="game-rules-step" data-rules-step="2">
+              <div class="step-copy">
+                <strong id="sceneStepTitle">Choose one shared scene</strong>
+                <span id="sceneStepBody">Pick a built-in scene or upload your own 3DGS file.</span>
+              </div>
+              <div class="modal-scene-picker">
               <div class="scene-picker-title">
                 <span id="modalSceneLibraryLabel">Choose challenge scene</span>
                 <small id="modalSceneLibraryHint">Pick a built-in scene or upload your own 3DGS file.</small>
@@ -276,6 +288,7 @@
                     <button class="scene-preset-button modal-scene-button" data-scene="shanghai-office">Shanghai Office</button>
                     <button class="scene-preset-button modal-scene-button" data-scene="gaussians">Gaussians</button>
                     <button class="scene-preset-button modal-scene-button" data-scene="japanese-garden">Japanese Garden</button>
+                    <button class="scene-preset-button modal-scene-button" data-scene="matrix-campus">Matrix Campus</button>
                   </div>
                 </div>
                 <label class="scene-source-card modal-upload-card">
@@ -285,6 +298,21 @@
                   <small id="sceneSourceUploadHint">Use your own .ply / .splat / .ksplat file.</small>
                 </label>
               </div>
+              </div>
+            </div>
+            <div class="game-rules-step" data-rules-step="3">
+              <div class="step-copy">
+                <strong id="nameStepTitle">Almost ready</strong>
+                <span id="nameStepBody">Enter a nickname for the leaderboard, then start your 3 tries.</span>
+              </div>
+              <label class="field-row">
+                <span>Your nickname</span>
+                <input id="modalPlayerName" type="text" maxlength="18" placeholder="Enter nickname first" />
+              </label>
+              <div class="rules-ready-card">
+                <strong id="readyCardTitle">Your challenge is ready</strong>
+                <span id="readyCardBody">After entering, use Start try on the canvas to begin the 15-second round.</span>
+              </div>
             </div>
             <ol class="onboarding-steps game-rule-steps">
               <li><strong>Host uploads a scene</strong><span>The shared room keeps one 3DGS scene for all invited players.</span></li>
@@ -292,7 +320,10 @@
               <li><strong>3 tries per player</strong><span>Each try lasts 15 seconds. Only the highest score is ranked.</span></li>
               <li><strong>Creativity score</strong><span>Coverage, rhythm, variety, and spatial play all matter.</span></li>
             </ol>
-            <button id="gameRulesGotIt" class="primary-button btn-full">Got it and import scene</button>
+            <div class="rules-modal-actions">
+              <button id="gameRulesBack" class="secondary-button" type="button">Back</button>
+              <button id="gameRulesGotIt" class="primary-button" type="button">Next</button>
+            </div>
           </div>
         </div>
 
@@ -376,6 +407,6 @@
       </aside>
     </main>
 
-    <script type="module" src="./src/app.js?v=gaussian-smash-name"></script>
+    <script type="module" src="./src/app.js?v=game-modal-steps"></script>
   </body>
 </html>

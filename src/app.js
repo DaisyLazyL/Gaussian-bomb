@@ -64,6 +64,7 @@ const ui = {
   gameRulesModal: document.querySelector("#gameRulesModal"),
   gameRulesClose: document.querySelector("#gameRulesClose"),
   gameRulesGotIt: document.querySelector("#gameRulesGotIt"),
+  gameRulesBack: document.querySelector("#gameRulesBack"),
   modalPlayerName: document.querySelector("#modalPlayerName"),
   modalSceneInput: document.querySelector("#modalSceneInput"),
   modalUploadScene: document.querySelector("#modalUploadScene"),
@@ -86,16 +87,19 @@ const ui = {
 };
 
 const MAX_POINTS = 900000;
+const BUILT_IN_SCENE_BASE = "https://media.githubusercontent.com/media/DaisyLazyL/Gaussian-bomb/main/scenes";
 const BUILT_IN_SCENES = {
-  "shanghai-office": { name: "Shanghai Office", zhName: "上海办公室", file: "/scenes/shanghai-office.ply" },
-  gaussians: { name: "Gaussians", zhName: "Gaussians", file: "/scenes/gaussians.ply" },
-  "japanese-garden": { name: "Japanese Garden", zhName: "日式园林", file: "/scenes/japanese-garden.ply" }
+  "shanghai-office": { name: "Shanghai Office", zhName: "上海办公室", file: `${BUILT_IN_SCENE_BASE}/shanghai-office.ply` },
+  gaussians: { name: "Gaussians", zhName: "Gaussians", file: `${BUILT_IN_SCENE_BASE}/gaussians.ply` },
+  "japanese-garden": { name: "Japanese Garden", zhName: "日式园林", file: `${BUILT_IN_SCENE_BASE}/japanese-garden.ply` },
+  "matrix-campus": { name: "Matrix Campus", zhName: "矩阵园区", file: `${BUILT_IN_SCENE_BASE}/matrix-campus.ply` }
 };
 const state = {
   lang: localStorage.getItem("pinchgs-lang") || "zh",
   mode: "studio",
   roomId: "",
   roomSceneLoaded: false,
+  gameRulesStep: 1,
   points: null,
   original: null,
   tool: "move",
@@ -425,6 +429,9 @@ const translations = {
     stepTwoHandsBody: "Move hands apart or together to zoom.",
     skip: "Skip",
     rulesTitle: "Game mode rules",
+    rulesStepRules: "Rules",
+    rulesStepScene: "Scene",
+    rulesStepName: "Name",
     rulesKicker: "Challenge setup",
     rulesHeroTitle: "Invite friends to tear apart one shared Gaussian scene.",
     rulesHeroBody: "Everyone plays on their own computer. Best score wins.",
@@ -439,6 +446,17 @@ const translations = {
     sceneSourceBuiltIn: "Built-in scenes",
     sceneSourceBuiltInHint: "Fastest way to start a room.",
     sceneSourceUploadHint: "Use your own .ply / .splat / .ksplat file.",
+    sceneStepTitle: "Choose one shared scene",
+    sceneStepBody: "Everyone will smash this same Gaussian scene.",
+    nameStepTitle: "Almost ready",
+    nameStepBody: "Enter a nickname for the leaderboard, then start your 3 tries.",
+    readyCardTitle: "Your challenge is ready",
+    readyCardBody: "After entering, use Start try on the canvas to begin the 15-second round.",
+    back: "Back",
+    nextScene: "Next: choose scene",
+    nextName: "Next: nickname",
+    chooseSceneToContinue: "Choose a scene to continue",
+    enterChallenge: "Enter challenge",
     hostUploadTitle: "Host uploads a scene",
     hostUploadBody: "The shared room keeps one 3DGS scene for all invited players.",
     shareInviteTitle: "Share the invite link",
@@ -696,6 +714,9 @@ const translations = {
     stepTwoHandsBody: "双手分开或靠近来缩放场景。",
     skip: "跳过",
     rulesTitle: "游戏模式规则",
+    rulesStepRules: "规则",
+    rulesStepScene: "场景",
+    rulesStepName: "昵称",
     rulesKicker: "挑战启动",
     rulesHeroTitle: "邀请朋友一起撕碎同一个 Gaussian 场景。",
     rulesHeroBody: "每个人用自己的电脑挑战，最后按最高分排名。",
@@ -710,6 +731,17 @@ const translations = {
     sceneSourceBuiltIn: "内置场景",
     sceneSourceBuiltInHint: "最快创建房间，适合现场开局。",
     sceneSourceUploadHint: "使用你自己的 .ply / .splat / .ksplat 文件。",
+    sceneStepTitle: "选择一个共享场景",
+    sceneStepBody: "所有被邀请的人都会挑战同一个 Gaussian 场景。",
+    nameStepTitle: "马上开始",
+    nameStepBody: "输入排行榜昵称，然后进入挑战区开始 3 次机会。",
+    readyCardTitle: "挑战已准备好",
+    readyCardBody: "进入后点击画布顶部的开始按钮，开启 15 秒挑战。",
+    back: "上一步",
+    nextScene: "下一步：选场景",
+    nextName: "下一步：填昵称",
+    chooseSceneToContinue: "先选择一个场景",
+    enterChallenge: "进入挑战",
     hostUploadTitle: "房主上传场景",
     hostUploadBody: "房间会保存一个共享 3DGS 场景，所有玩家挑战同一个场景。",
     shareInviteTitle: "分享邀请链接",
@@ -898,6 +930,9 @@ function applyLanguage() {
   ui.onboardingStart.textContent = t("startCamera");
   ui.onboardingSkip.textContent = t("skip");
   setText("#gameRulesModal .panel-title span", "rulesTitle");
+  setText("#rulesStepRules", "rulesStepRules");
+  setText("#rulesStepScene", "rulesStepScene");
+  setText("#rulesStepName", "rulesStepName");
   setText("#rulesKicker", "rulesKicker");
   setText(".game-rules-hero strong", "rulesHeroTitle");
   setText(".game-rules-hero .rules-hero-body", "rulesHeroBody");
@@ -914,6 +949,13 @@ function applyLanguage() {
   setText("#sceneSourceBuiltIn", "sceneSourceBuiltIn");
   setText("#sceneSourceBuiltInHint", "sceneSourceBuiltInHint");
   setText("#sceneSourceUploadHint", "sceneSourceUploadHint");
+  setText("#sceneStepTitle", "sceneStepTitle");
+  setText("#sceneStepBody", "sceneStepBody");
+  setText("#nameStepTitle", "nameStepTitle");
+  setText("#nameStepBody", "nameStepBody");
+  setText("#readyCardTitle", "readyCardTitle");
+  setText("#readyCardBody", "readyCardBody");
+  if (ui.gameRulesBack) ui.gameRulesBack.textContent = t("back");
   if (ui.modalUploadScene) ui.modalUploadScene.textContent = t("uploadOwnScene");
   const ruleSteps = [
     ["hostUploadTitle", "hostUploadBody"],
@@ -925,7 +967,7 @@ function applyLanguage() {
     item.querySelector("strong").textContent = t(ruleSteps[index][0]);
     item.querySelector("span").textContent = t(ruleSteps[index][1]);
   });
-  ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("gotIt") : t("gotItImport");
+  updateGameRulesStep();
   setText("#tryResultModal .panel-title span", "tryResult");
   if (!state.competition.score) ui.resultDelta.textContent = t("firstTryComplete");
   if (ui.resultTitle && !state.competition.score) ui.resultTitle.textContent = t("titleChaos");
@@ -1101,6 +1143,7 @@ function bindUi() {
   ui.onboardingClose.addEventListener("click", hideOnboarding);
   ui.gameRulesClose.addEventListener("click", hideGameRules);
   ui.gameRulesGotIt.addEventListener("click", handleGameRulesPrimary);
+  ui.gameRulesBack?.addEventListener("click", () => setGameRulesStep(state.gameRulesStep - 1));
   ui.modalPlayerName.addEventListener("input", () => {
     ui.playerName.value = ui.modalPlayerName.value;
   });
@@ -1250,7 +1293,7 @@ function updateRoomUi() {
     ? t("roomReady", state.roomId)
     : t("roomNeedsScene", state.roomId);
   ui.copyRoomLink.disabled = false;
-  ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("gotIt") : t("gotItImport");
+  updateGameRulesStep();
   ui.roomLinkText.textContent = location.hostname === "localhost" || location.hostname === "127.0.0.1"
     ? t("lanHint")
     : inviteUrl();
@@ -1330,7 +1373,7 @@ async function loadFile(file) {
       await uploadRoomScene(file.name, buffer);
     }
     if (state.mode === "game" && ui.gameRulesModal.classList.contains("is-visible")) {
-      hideGameRules();
+      setGameRulesStep(3);
     }
   } catch (error) {
     ui.interactionState.textContent = error.message;
@@ -1365,7 +1408,7 @@ async function loadBuiltInScene(sceneId) {
     }
     ui.interactionState.textContent = t("sceneLoaded", label);
     if (state.mode === "game" && ui.gameRulesModal.classList.contains("is-visible")) {
-      hideGameRules();
+      setGameRulesStep(3);
     }
   } catch (error) {
     ui.interactionState.textContent = t("importFailed", error.message);
@@ -3067,15 +3110,57 @@ function hideOnboarding() {
   ui.onboarding.classList.remove("is-visible");
 }
 
-function handleGameRulesPrimary() {
-  normalizedPlayerName();
-  hideGameRules();
-  if (state.mode === "game" && !state.roomSceneLoaded) {
-    ui.fileInput.click();
+function setGameRulesStep(step) {
+  state.gameRulesStep = clamp(Math.round(step), 1, 3);
+  updateGameRulesStep();
+}
+
+function updateGameRulesStep() {
+  if (!ui.gameRulesModal || !ui.gameRulesGotIt) return;
+  const step = state.gameRulesStep || 1;
+  const card = ui.gameRulesModal.querySelector(".game-rules-card");
+  if (card) card.dataset.step = String(step);
+  ui.gameRulesModal.querySelectorAll("[data-rules-step]").forEach(section => {
+    section.classList.toggle("is-active", Number(section.dataset.rulesStep) === step);
+  });
+  ui.gameRulesModal.querySelectorAll("[data-rules-step-dot]").forEach(dot => {
+    dot.classList.toggle("is-active", Number(dot.dataset.rulesStepDot) === step);
+    dot.classList.toggle("is-complete", Number(dot.dataset.rulesStepDot) < step);
+  });
+  if (ui.gameRulesBack) {
+    ui.gameRulesBack.hidden = step === 1;
+  }
+  if (step === 1) {
+    ui.gameRulesGotIt.disabled = false;
+    ui.gameRulesGotIt.textContent = t("nextScene");
+  } else if (step === 2) {
+    ui.gameRulesGotIt.disabled = !state.roomSceneLoaded;
+    ui.gameRulesGotIt.textContent = state.roomSceneLoaded ? t("nextName") : t("chooseSceneToContinue");
+  } else {
+    ui.gameRulesGotIt.disabled = false;
+    ui.gameRulesGotIt.textContent = t("enterChallenge");
   }
 }
 
+function handleGameRulesPrimary() {
+  if (state.gameRulesStep === 1) {
+    setGameRulesStep(state.roomSceneLoaded ? 3 : 2);
+    return;
+  }
+  if (state.gameRulesStep === 2) {
+    if (!state.roomSceneLoaded) {
+      showToast(t("chooseSceneToContinue"));
+      return;
+    }
+    setGameRulesStep(3);
+    return;
+  }
+  normalizedPlayerName();
+  hideGameRules();
+}
+
 function showGameRules() {
+  setGameRulesStep(state.roomSceneLoaded ? 3 : 1);
   ui.gameRulesModal.classList.add("is-visible");
 }
 

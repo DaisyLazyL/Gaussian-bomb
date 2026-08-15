@@ -13,6 +13,8 @@ const mimeTypes = {
   ".ply": "application/octet-stream",
   ".splat": "application/octet-stream",
   ".ksplat": "application/octet-stream",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
   ".wasm": "application/wasm"
 };
 
