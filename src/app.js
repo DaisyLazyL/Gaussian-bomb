@@ -219,6 +219,10 @@ const translations = {
     scenePickerHint: "Pick a built-in scene or upload your own 3DGS file.",
     uploadOwnScene: "Upload my scene",
     sceneLoading: name => `Loading ${name}...`,
+    sceneDownloading: (name, loaded, total) => total
+      ? `Downloading ${name}: ${loaded} / ${total} MB`
+      : `Downloading ${name}: ${loaded} MB`,
+    sceneParsing: name => `Parsing ${name}...`,
     sceneLoaded: name => `${name} loaded for this challenge.`,
     copyInvite: "Copy invite link",
     roomLinkHint: "Invited players open the link and enter Game mode directly.",
@@ -504,6 +508,10 @@ const translations = {
     scenePickerHint: "选择一个内置场景，或上传你自己的 3DGS 文件。",
     uploadOwnScene: "上传我的场景",
     sceneLoading: name => `正在加载 ${name}...`,
+    sceneDownloading: (name, loaded, total) => total
+      ? `正在下载 ${name}：${loaded} / ${total} MB`
+      : `正在下载 ${name}：${loaded} MB`,
+    sceneParsing: name => `正在解析 ${name}...`,
     sceneLoaded: name => `${name} 已作为本次挑战场景。`,
     copyInvite: "复制邀请链接",
     roomLinkHint: "朋友打开链接后会直接进入游戏模式。",
@@ -1398,7 +1406,8 @@ async function loadBuiltInScene(sceneId) {
   try {
     const response = await fetch(scene.file);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-    const buffer = await response.arrayBuffer();
+    const buffer = await readSceneResponse(response, label);
+    ui.interactionState.textContent = t("sceneParsing", label);
     const filename = `${label}.ply`;
     loadSceneBuffer(buffer, filename, buffer.byteLength);
     state.activeBuiltInScene = sceneId;
@@ -1417,6 +1426,49 @@ async function loadBuiltInScene(sceneId) {
       button.disabled = false;
     });
   }
+}
+
+async function readSceneResponse(response, label) {
+  const total = Number(response.headers.get("Content-Length") || 0);
+  if (!response.body || !response.body.getReader) {
+    const buffer = await response.arrayBuffer();
+    updateSceneDownloadProgress(label, buffer.byteLength, total || buffer.byteLength);
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+  let lastUpdate = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    const now = performance.now();
+    if (now - lastUpdate > 180 || loaded === total) {
+      updateSceneDownloadProgress(label, loaded, total);
+      lastUpdate = now;
+    }
+  }
+
+  updateSceneDownloadProgress(label, loaded, total);
+  const buffer = new Uint8Array(loaded);
+  let offset = 0;
+  chunks.forEach(chunk => {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  });
+  return buffer.buffer;
+}
+
+function updateSceneDownloadProgress(label, loadedBytes, totalBytes) {
+  const loaded = (loadedBytes / 1024 / 1024).toFixed(1);
+  const total = totalBytes ? (totalBytes / 1024 / 1024).toFixed(1) : "";
+  const message = t("sceneDownloading", label, loaded, total);
+  ui.interactionState.textContent = message;
+  ui.fileMeta.textContent = message;
 }
 
 function loadSceneBuffer(buffer, filename, size = buffer.byteLength) {
