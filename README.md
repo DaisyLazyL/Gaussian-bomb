@@ -5,7 +5,7 @@ Gaussian Smash 是一个用手势直接编辑 3D Gaussian 场景的 Hackday 原�
 ## 在线体验
 
 ```text
-https://daisylazyl.github.io/Gaussian-bomb/
+https://daisylazyl.github.io/gaussian-smash/
 ```
 
 ## 当前能力
@@ -158,11 +158,5 @@ LiteApp 配置建议：
 Repository:
 
 ```text
-https://github.com/DaisyLazyL/Gaussian-bomb
-```
-
-计划仓库名：
-
-```text
-gaussian-smash
+https://github.com/DaisyLazyL/gaussian-smash
 ```

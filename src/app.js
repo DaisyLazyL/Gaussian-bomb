@@ -87,7 +87,7 @@ const ui = {
 };
 
 const MAX_POINTS = 900000;
-const BUILT_IN_SCENE_BASE = "https://media.githubusercontent.com/media/DaisyLazyL/Gaussian-bomb/main/scenes";
+const BUILT_IN_SCENE_BASE = "https://media.githubusercontent.com/media/DaisyLazyL/gaussian-smash/main/scenes";
 const BUILT_IN_SCENES = {
   "shanghai-office": { name: "Shanghai Office", zhName: "上海办公室", file: `${BUILT_IN_SCENE_BASE}/shanghai-office.ply` },
   gaussians: { name: "Gaussians", zhName: "Gaussians", file: `${BUILT_IN_SCENE_BASE}/gaussians.ply` },
